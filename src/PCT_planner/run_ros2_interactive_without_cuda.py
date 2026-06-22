@@ -127,7 +127,11 @@ def traj_to_path(traj_3d, node, frame='map'):
     return msg
 
 
-def traj_to_marker(traj_3d, node, frame='map', marker_id=0):
+def traj_to_marker(traj_3d, node, frame='map', marker_id=0,
+                   color=None,
+                   width=0.1):
+    if color is None:
+        color = ColorRGBA(r=0.0, g=1.0, b=0.3, a=1.0)
     m = Marker()
     m.header.stamp = node.get_clock().now().to_msg()
     m.header.frame_id = frame
@@ -135,8 +139,8 @@ def traj_to_marker(traj_3d, node, frame='map', marker_id=0):
     m.id = marker_id
     m.type = Marker.LINE_STRIP
     m.action = Marker.ADD
-    m.scale.x = 0.1
-    m.color = ColorRGBA(r=0.0, g=1.0, b=0.3, a=1.0)
+    m.scale.x = width
+    m.color = color
     for pt in traj_3d:
         from geometry_msgs.msg import Point
         p = Point(x=float(pt[0]), y=float(pt[1]), z=float(pt[2]))
@@ -172,6 +176,7 @@ class PCTNode(Node):
         self.pc_pub     = self.create_publisher(PointCloud2, '/global_points', 1)
         self.tomo_pub   = self.create_publisher(PointCloud2, '/tomogram',       1)
         self.path_pub   = self.create_publisher(Path,        '/pct_path',       1)
+        self.astar_path_pub = self.create_publisher(Path, '/pct_astar_path', 1)
         self.marker_pub = self.create_publisher(Marker,      '/pct_marker',     1)
 
         # Click state
@@ -217,7 +222,7 @@ class PCTNode(Node):
             '   1. Click "Publish Point" toolbar button\n'
             '   2. Click on the map → START  (green sphere)\n'
             '   3. Click again      → END    (red sphere)\n'
-            '   → Path published on /pct_path + /pct_marker\n'
+            '   → Smoothed path on /pct_path, raw A* path on /pct_astar_path\n'
             '   4. Next two clicks start a new query.\n'
             '══════════════════════════════════════════════'
         )
@@ -404,8 +409,19 @@ class PCTNode(Node):
             return
 
         self.get_logger().info(f'Path found: {traj.shape[0]} waypoints')
+        astar_path = self.planner.getLastAstarPath()
+        if astar_path is not None and len(astar_path) > 0:
+            self.astar_path_pub.publish(traj_to_path(astar_path, self))
+            self.marker_pub.publish(
+                traj_to_marker(
+                    astar_path, self, marker_id=1,
+                    color=ColorRGBA(r=0.1, g=0.45, b=1.0, a=1.0),
+                    width=0.07
+                )
+            )
+            self.get_logger().info(f'Raw A* path published: {astar_path.shape[0]} waypoints')
         self.path_pub.publish(traj_to_path(traj, self))
-        self.marker_pub.publish(traj_to_marker(traj, self))
+        self.marker_pub.publish(traj_to_marker(traj, self, marker_id=0))
 
         stem = os.path.splitext(os.path.basename(self.tomo_path))[0]
         out = ROOT + f'/rsc/{stem}_traj.npy'

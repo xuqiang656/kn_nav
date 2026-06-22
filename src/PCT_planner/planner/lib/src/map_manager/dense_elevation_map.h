@@ -8,7 +8,9 @@ class DenseElevationMap {
   ~DenseElevationMap() = default;
 
   void Init(const double resolution, const int num_layers,
-            const Eigen::MatrixXd& cost_map, const Eigen::MatrixXd& ele_mask,
+            const Eigen::MatrixXd& cost_map,
+            const Eigen::MatrixXd& planning_cost_map,
+            const Eigen::MatrixXd& ele_mask,
             const Eigen::MatrixXd& height, const Eigen::MatrixXd& ceiling,
             const Eigen::MatrixXd& grad_x, const Eigen::MatrixXd& grad_y);
 
@@ -75,6 +77,7 @@ class DenseElevationMap {
   double safe_cost_threshold_ = 10;
 
   Eigen::MatrixXd cost_;
+  Eigen::MatrixXd planning_cost_;
   Eigen::MatrixXd ele_mask_;
   Eigen::MatrixXd height_;
   Eigen::MatrixXd ceiling_;

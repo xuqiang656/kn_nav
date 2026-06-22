@@ -18,12 +18,14 @@ static std::vector<Eigen::Vector2i> kNeighbors = std::vector<Eigen::Vector2i>{
 };
 
 void Astar::Init(const double cost_threshold, const int num_layers,
-                 const double resolution,  const double step_cost_weight, const Eigen::MatrixXd& cost_map,
+                 const double resolution, const double step_cost_weight,
+                 const Eigen::MatrixXd& cost_map,
+                 const Eigen::MatrixXd& search_cost_map,
                  const Eigen::MatrixXd& height_map,
                  const Eigen::MatrixXd& ele_map) {
   auto t0 = std::chrono::high_resolution_clock::now();
   cost_threshold_ = cost_threshold;
-step_cost_weight_  = step_cost_weight;
+  step_cost_weight_ = step_cost_weight;
 
   max_x_ = cost_map.cols();
   max_y_ = cost_map.rows() / num_layers;
@@ -42,6 +44,7 @@ step_cost_weight_  = step_cost_weight;
         double z = static_cast<int>(height / resolution);
         grid_map_[i][j][k] = Node(Eigen::Vector3i(z, j, k), nullptr);
         grid_map_[i][j][k].cost = cost_map(j + row_offset, k);
+        grid_map_[i][j][k].search_cost = search_cost_map(j + row_offset, k);
         grid_map_[i][j][k].height = height;
         grid_map_[i][j][k].ele = ele_map(j + row_offset, k);
         grid_map_[i][j][k].layer = i;
@@ -161,8 +164,8 @@ bool Astar::Search(const Eigen::Vector3i& start, const Eigen::Vector3i& goal) {
       // }
 
       auto diff = neighbor_node->idx - current_node->idx;
-      double step_cost = step_cost_weight_ * neighbor_node->cost;
-      if (step_cost < 5) step_cost = 0.0;
+      const double step_cost =
+          step_cost_weight_ * std::max(0.0, neighbor_node->search_cost);
       tentative_g =
           current_node->g +
           std::sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]) +

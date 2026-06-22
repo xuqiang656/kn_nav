@@ -3,6 +3,7 @@ global_localization_node:
     # path_map: "/home/nav_map/nav_test/global_map_downsize.pcd"
     path_map: "/home/kangneng/xq/map/pcd/map1-2/global_map_downsize.pcd"
     # path_map: "/home/kangneng/xq/map/pcd/kn-floor2/global_map_downsize.pcd"
+    
     # path_imu_to_base: "/home/kangneng/xq/map/pcd/kn-floor2/imu_to_base.txt"
     path_imu_to_base: "/home/kangneng/xq/map/pcd/map1-2/imu_to_base_origin.txt"
 

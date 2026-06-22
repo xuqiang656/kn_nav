@@ -5,6 +5,7 @@
 
 void DenseElevationMap::Init(const double resolution, const int num_layers,
                              const Eigen::MatrixXd& cost_map,
+                             const Eigen::MatrixXd& planning_cost_map,
                              const Eigen::MatrixXd& ele_mask,
                              const Eigen::MatrixXd& height,
                              const Eigen::MatrixXd& ceiling,
@@ -17,6 +18,7 @@ void DenseElevationMap::Init(const double resolution, const int num_layers,
   max_y_ = cost_map.rows() / num_layers;
   xy_size_ = max_x_ * max_y_;
   cost_ = cost_map;
+  planning_cost_ = planning_cost_map;
   ele_mask_ = ele_mask;
   height_ = height;
   ceiling_ = ceiling;
@@ -37,7 +39,7 @@ double DenseElevationMap::GetRealCost(int layer, double x, double y,
     if (grad != nullptr) {
       *grad = Eigen::Vector2d(grad_x_(row, col), grad_y_(row, col));
     }
-    return cost;
+    return planning_cost_(row, col);
   }
 
   double ele_value = ele_mask_(row, col);
@@ -78,13 +80,13 @@ double DenseElevationMap::GetRealCost(int layer, double x, double y,
     *new_layer = real_layer;
   }
 
-  return cost;
+  return planning_cost_(real_row, col);
 }
 
 double DenseElevationMap::GetRealCostSafe(int layer, double x, double y,
                                           const double height_hint) {
   int real_layer = UpdateLayerSafe(layer, x, y, height_hint);
-  return cost_(index_y_safe(y) + real_layer * max_y_, index_x_safe(x));
+  return planning_cost_(index_y_safe(y) + real_layer * max_y_, index_x_safe(x));
 }
 
 int DenseElevationMap::UpdateLayer(const int layer, const double x,

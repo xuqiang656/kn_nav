@@ -47,36 +47,22 @@ All parameters are grouped by where they live and when their effect takes hold.
 
 **File:** `planner/config/param.py`
 
-> These take effect on the **next planning call** — no rebuild or re-tomography needed.
+> These take effect when the planner is constructed and the tomogram is loaded. Restart the planner node after editing this file; no rebuild or re-tomography is needed.
 
 | Parameter | Default | Meaning |
 |-----------|---------|---------|
 | `use_quintic` | `True` | Use quintic (5th-order) spline for trajectory optimisation. Produces smoother paths at the cost of a little more compute. Set `False` for cubic splines if planning speed matters. |
 | `max_heading_rate` | `10` | Maximum allowed angular rate of heading change along the trajectory. Lower values force gentler turns. |
+| `a_star_cost_threshold` | `20.0` | A* physical traversability cutoff. Cells with raw tomogram cost above this value are blocked for ordinary traversal. |
+| `step_cost_weight` | `0.05` | Weight applied to the planning cost in each A* edge. The planning cost includes raw tomogram cost plus the runtime clearance cost below. |
+| `optimizer_cost_threshold` | `10.0` | GPMP starts penalising the planning cost above this value. `safe_cost_margin` is kept as a compatibility alias. |
+| `use_clearance_cost` | `True` | Add a CPU-side distance-field cost after loading an existing pickle. This does not require CUDA or re-running tomography. |
+| `clearance_cost_weight` | `8.0` | Strength of the path-centering preference. Larger values keep farther from obstacles but may increase detours. |
+| `clearance_cost_decay` | `1.0` m | Distance scale for clearance-cost decay. Larger values keep a centering preference farther into wide corridors. |
 
 ---
 
-## 3. Planner init_map arguments
-
-**File:** `planner/scripts/planner_wrapper.py` — look for the `init_map(...)` call (around line 80).
-
-```python
-self.planner.init_map(..., 20, 15, 0.2)
-#                          ^    ^   ^
-#                          |    |   └─ step_cost_weight
-#                          |    └───── safe_cost_margin
-#                          └────────── a_star_cost_threshold
-```
-
-| Argument | Default | Meaning |
-|----------|---------|---------|
-| `a_star_cost_threshold` | `20` | A* only considers cells whose traversability cost is **below** this value. Raise to let the planner use higher-cost (less-ideal) terrain; lower to restrict it to well-traversable areas only. |
-| `safe_cost_margin` | `15` | The GPMP trajectory optimiser penalises the path when it comes near cells with cost above this threshold. Acts as a second layer of obstacle avoidance during smoothing. |
-| `step_cost_weight` | `0.2` | Weight applied to elevation changes in the A* cost function. Higher values produce routes that prefer flatter ground; lower values allow more aggressive height changes to find shorter paths. |
-
----
-
-## 4. Quick recipes
+## 3. Quick recipes
 
 | Goal | What to change |
 |------|---------------|
@@ -87,5 +73,6 @@ self.planner.init_map(..., 20, 15, 0.2)
 | Merge floors that are incorrectly split | Increase `map.slice_dh` |
 | More resolution / detail | Decrease `map.resolution` (e.g. `0.05`) — costs GPU memory & time |
 | Planner finds paths through tight spaces | Raise `a_star_cost_threshold` |
+| Planner sticks to inflated obstacle edges | Increase `clearance_cost_weight` to `10` or `12`, or increase `clearance_cost_decay` |
 | Smoother trajectory | Keep `use_quintic = True` and lower `max_heading_rate` |
 | Faster planning, less smooth path | Set `use_quintic = False` |

@@ -2,6 +2,7 @@ import os
 import sys
 import pickle
 import numpy as np
+from scipy.ndimage import distance_transform_edt
 
 from utils import *
 
@@ -17,6 +18,16 @@ class TomogramPlanner(object):
 
         self.use_quintic = self.cfg.planner.use_quintic
         self.max_heading_rate = self.cfg.planner.max_heading_rate
+        self.a_star_cost_threshold = self.cfg.planner.a_star_cost_threshold
+        self.optimizer_cost_threshold = getattr(
+            self.cfg.planner,
+            'optimizer_cost_threshold',
+            getattr(self.cfg.planner, 'safe_cost_margin', 10.0)
+        )
+        self.step_cost_weight = self.cfg.planner.step_cost_weight
+        self.use_clearance_cost = getattr(self.cfg.planner, 'use_clearance_cost', True)
+        self.clearance_cost_weight = getattr(self.cfg.planner, 'clearance_cost_weight', 8.0)
+        self.clearance_cost_decay = getattr(self.cfg.planner, 'clearance_cost_decay', 1.0)
 
         self.tomo_dir = rsg_root + self.cfg.wrapper.tomo_dir
 
@@ -30,6 +41,11 @@ class TomogramPlanner(object):
 
         self.start_idx = np.zeros(3, dtype=np.int32)
         self.end_idx = np.zeros(3, dtype=np.int32)
+        self.elev_g = None
+        self.raw_trav = None
+        self.planning_trav = None
+        self.clearance = None
+        self.last_astar_path_3d = None
 
     def loadTomogram(self, tomo_file):
         with open(self.tomo_dir + tomo_file + '.pickle', 'rb') as handle:
@@ -50,12 +66,20 @@ class TomogramPlanner(object):
         trav_gy = tomogram[2]
         elev_g = tomogram[3]
         elev_g = np.nan_to_num(elev_g, nan=-100)
+        self.elev_g = elev_g
         elev_c = tomogram[4]
         elev_c = np.nan_to_num(elev_c, nan=1e6)
 
-        self.initPlanner(trav, trav_gx, trav_gy, elev_g, elev_c)
+        planning_trav, planning_grad_x, planning_grad_y = self.buildPlanningCost(
+            trav, elev_g
+        )
+        self.initPlanner(
+            trav, planning_trav, planning_grad_x, planning_grad_y, elev_g,
+            elev_c
+        )
         
-    def initPlanner(self, trav, trav_gx, trav_gy, elev_g, elev_c):
+    def initPlanner(self, trav, planning_trav, planning_grad_x, planning_grad_y,
+                    elev_g, elev_c):
         diff_t = trav[1:] - trav[:-1]
         diff_g = np.abs(elev_g[1:] - elev_g[:-1])
 
@@ -77,13 +101,15 @@ class TomogramPlanner(object):
             max_heading_rate=self.max_heading_rate, use_quintic=self.use_quintic
         )
         self.planner.init_map(
-            20, 15, self.resolution, self.n_slice, 0.2,
+            self.a_star_cost_threshold, self.optimizer_cost_threshold,
+            self.resolution, self.n_slice, self.step_cost_weight,
             trav.reshape(-1, trav.shape[-1]).astype(np.double),
+            planning_trav.reshape(-1, planning_trav.shape[-1]).astype(np.double),
             elev_g.reshape(-1, elev_g.shape[-1]).astype(np.double),
             elev_c.reshape(-1, elev_c.shape[-1]).astype(np.double),
             gateway.reshape(-1, gateway.shape[-1]),
-            trav_gy.reshape(-1, trav_gy.shape[-1]).astype(np.double),
-            -trav_gx.reshape(-1, trav_gx.shape[-1]).astype(np.double)
+            planning_grad_y.reshape(-1, planning_grad_y.shape[-1]).astype(np.double),
+            -planning_grad_x.reshape(-1, planning_grad_x.shape[-1]).astype(np.double)
         )
 
     def plan(self, start_pos, end_pos):
@@ -95,7 +121,9 @@ class TomogramPlanner(object):
         path_finder: a_star.Astar = self.planner.get_path_finder()
         path = path_finder.get_result_matrix()
         if len(path) == 0:
+            self.last_astar_path_3d = None
             return None
+        self.last_astar_path_3d = self.pathGridToMap(path)
 
         optimizer: traj_opt.GPMPOptimizer = (
             self.planner.get_trajectory_optimizer()
@@ -116,6 +144,44 @@ class TomogramPlanner(object):
         traj_3d = transTrajGrid2Map(self.map_dim, self.center, self.resolution, traj_3d)
 
         return traj_3d
+
+    def getLastAstarPath(self):
+        return self.last_astar_path_3d
+
+    def buildPlanningCost(self, trav, elev_g):
+        self.raw_trav = trav.copy()
+        planning_trav = trav.astype(np.float32).copy()
+        self.clearance = np.zeros_like(planning_trav, dtype=np.float32)
+
+        if self.use_clearance_cost:
+            valid_floor = elev_g > -50
+            passable = valid_floor & (trav <= self.a_star_cost_threshold)
+            for layer in range(trav.shape[0]):
+                clearance = (
+                    distance_transform_edt(passable[layer]).astype(np.float32)
+                    * self.resolution
+                )
+                clearance_cost = self.clearance_cost_weight * np.exp(
+                    -clearance / max(self.clearance_cost_decay, 1e-3)
+                )
+                clearance_cost[~passable[layer]] = 0.0
+                planning_trav[layer] += clearance_cost.astype(np.float32)
+                self.clearance[layer] = clearance
+
+        grad_x = np.zeros_like(planning_trav, dtype=np.float32)
+        grad_y = np.zeros_like(planning_trav, dtype=np.float32)
+        grad_x[:, 1:-1, :] = (planning_trav[:, 2:, :] - planning_trav[:, :-2, :]) * 0.5
+        grad_y[:, :, 1:-1] = (planning_trav[:, :, 2:] - planning_trav[:, :, :-2]) * 0.5
+        self.planning_trav = planning_trav
+        return planning_trav, grad_x, grad_y
+
+    def pathGridToMap(self, path):
+        layers = path[:, 0].astype(np.int32)
+        rows = path[:, 1].astype(np.int32)
+        cols = path[:, 2].astype(np.int32)
+        heights = self.elev_g[layers, rows, cols]
+        astar_grid = np.stack([cols, rows, heights / self.resolution], axis=1)
+        return transTrajGrid2Map(self.map_dim, self.center, self.resolution, astar_grid)
     
     def pos2idx(self, pos):
         pos = pos - self.center

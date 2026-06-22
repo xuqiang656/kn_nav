@@ -119,17 +119,27 @@ def sphere_marker(node, marker_id, xyz, rgba, frame_id='map'):
     return marker
 
 
-def path_marker(node, traj, frame_id='map'):
+def path_marker(
+    node,
+    traj,
+    frame_id='map',
+    ns='pct_path',
+    marker_id=1,
+    rgba=None,
+    width=0.12,
+):
+    if rgba is None:
+        rgba = ColorRGBA(r=0.0, g=1.0, b=0.25, a=1.0)
     marker = Marker()
     marker.header.stamp = node.get_clock().now().to_msg()
     marker.header.frame_id = frame_id
-    marker.ns = 'pct_path'
-    marker.id = 1
+    marker.ns = ns
+    marker.id = marker_id
     marker.type = Marker.LINE_STRIP
     marker.action = Marker.ADD
     marker.pose.orientation.w = 1.0
-    marker.scale.x = 0.12
-    marker.color = ColorRGBA(r=0.0, g=1.0, b=0.25, a=1.0)
+    marker.scale.x = width
+    marker.color = rgba
     for pt in traj:
         marker.points.append(Point(x=float(pt[0]), y=float(pt[1]), z=float(pt[2])))
     return marker
@@ -155,6 +165,7 @@ class ClickPlannerNode(Node):
 
         self.tomo_pub = self.create_publisher(PointCloud2, '/tomogram', 1)
         self.path_pub = self.create_publisher(Path, '/pct_path', 1)
+        self.astar_path_pub = self.create_publisher(Path, '/pct_astar_path', 1)
         self.marker_pub = self.create_publisher(Marker, '/pct_marker', 10)
         self.create_subscription(PointStamped, '/clicked_point', self.on_clicked_point, 10)
 
@@ -235,6 +246,7 @@ class ClickPlannerNode(Node):
 
         if len(self.clicks) == 0:
             self.marker_pub.publish(delete_marker(self, 'pct_path', 1, self.frame_id))
+            self.marker_pub.publish(delete_marker(self, 'pct_astar_path', 2, self.frame_id))
             self.clicks.append(xyz)
             self.marker_pub.publish(
                 sphere_marker(
@@ -274,6 +286,22 @@ class ClickPlannerNode(Node):
         if traj is None:
             self.get_logger().warn('No path found. Click another start/goal pair.')
             return
+
+        astar_path = self.planner.getLastAstarPath()
+        if astar_path is not None and len(astar_path) > 0:
+            self.astar_path_pub.publish(traj_to_path(self, astar_path, self.frame_id))
+            self.marker_pub.publish(
+                path_marker(
+                    self,
+                    astar_path,
+                    self.frame_id,
+                    ns='pct_astar_path',
+                    marker_id=2,
+                    rgba=ColorRGBA(r=0.1, g=0.45, b=1.0, a=1.0),
+                    width=0.07,
+                )
+            )
+            self.get_logger().info(f'Raw A* path published: {astar_path.shape[0]} waypoints')
 
         self.path_pub.publish(traj_to_path(self, traj, self.frame_id))
         self.marker_pub.publish(path_marker(self, traj, self.frame_id))

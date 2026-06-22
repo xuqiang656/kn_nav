@@ -27,6 +27,7 @@ class Node {
   double height = 0.0;
   double ele = 0;
   double cost = 0.0;
+  double search_cost = 0.0;
   int layer = 0;
   Eigen::Vector3i idx = Eigen::Vector3i(0, 0, 0);  // layer, row, col
   Node* parent = nullptr;
@@ -56,7 +57,9 @@ class Astar {
   ~Astar() = default;
 
   void Init(const double cost_threshold, const int num_layers,
-            const double resolution, const double step_cost_weight,  const Eigen::MatrixXd& cost_map,
+            const double resolution, const double step_cost_weight,
+            const Eigen::MatrixXd& cost_map,
+            const Eigen::MatrixXd& search_cost_map,
             const Eigen::MatrixXd& height_map, const Eigen::MatrixXd& ele_map);
 
   void Reset();
