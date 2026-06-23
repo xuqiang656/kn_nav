@@ -33,9 +33,9 @@ ROOT = os.path.dirname(os.path.dirname(LIB_PATH))
 
 # ── GTSAM + smoothing libs preload (must happen before pybind11 imports) ──
 for _lib in [
-    LIB_PATH + '/3rdparty/gtsam-4.1.1/install/lib/libmetis-gtsam.so',
-    LIB_PATH + '/3rdparty/gtsam-4.1.1/install/lib/libgtsam.so.4',
-    LIB_PATH + '/build/src/common/smoothing/libcommon_smoothing.so',
+    LIB_PATH + '/libmetis-gtsam.so',
+    LIB_PATH + '/libgtsam.so.4',
+    LIB_PATH + '/libcommon_smoothing.so',
 ]:
     ctypes.CDLL(_lib, mode=ctypes.RTLD_GLOBAL)
 
