@@ -1,0 +1,20 @@
+# pure_pursuit_planner — PCT integration parameters
+# Odometry source: /Odometry_open3d (map→base_link)
+# Path source: /pct_path (frame_id=map)
+#
+# Conservative defaults suited for initial bring-up on a quadruped robot.
+
+pure_pursuit_node:
+  ros__parameters:
+    k: 0.5                  # velocity → lookahead scale factor
+    Lfc: 0.5                # base lookahead distance [m] (was 0.8, tightened for stairs)
+    Kp: 1.0                 # proportional gain (unused in current PP formulation)
+    dt: 0.1                 # timer period [s] (10 Hz)
+    goal_threshold: 0.4     # stop when within this distance of goal [m]
+    max_acceleration: 0.08  # max linear acceleration [m/s²]
+    minCurvature: 0.0       # min curvature for speed modulation [rad/m]
+    maxCurvature: 3.0       # max curvature for speed modulation [rad/m]
+    minVelocity: 0.08       # min forward speed [m/s] (tight turns)
+    maxVelocity: 0.25       # max forward speed [m/s] (straight sections)
+    maxAngularVelocity: 0.5 # max angular speed [rad/s]
+    obstacle_th: 0.5        # obstacle distance threshold [m] (unused)
