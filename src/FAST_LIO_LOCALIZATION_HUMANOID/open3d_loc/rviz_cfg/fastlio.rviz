@@ -5,7 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /TF1/Frames1
-        - //fastdem/mapping/gridmap1
+        - //pct_path1
       Splitter Ratio: 0.5743380784988403
     Tree Height: 625
   - Class: rviz_common/Selection
@@ -289,6 +289,34 @@ Visualization Manager:
         Value: /fastdem/mapping/gridmap
       Use Rainbow: true
       Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 25; 255; 0
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Billboards
+      Line Width: 0.029999999329447746
+      Name: /pct_path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /pct_path
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
@@ -335,25 +363,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 18.79184341430664
+      Distance: 43.828548431396484
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.13124357163906097
-        Y: -0.7203280925750732
-        Z: -7.203001499176025
+        X: 1.1049985885620117
+        Y: 0.13504359126091003
+        Z: -7.203232765197754
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
+      Pitch: 1.5547963380813599
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz_default_plugins)
-      Yaw: 3.049865484237671
+      Yaw: 3.784867763519287
     Saved: ~
 Window Geometry:
   Displays:

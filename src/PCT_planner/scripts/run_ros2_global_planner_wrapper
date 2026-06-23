@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Wrapper for ros2 run / ros2 launch — resolves source tree and sets env.
+#
+# The Python script needs in-source .so libraries (GTSAM, smoothing) and
+# Python modules that are NOT installed by colcon.  This wrapper:
+#   1. Finds the PCT_planner source root
+#   2. Sets LD_LIBRARY_PATH for the .so files
+#   3. Sets PCT_ROOT so the Python script can locate its modules
+#   4. exec's python3 on the actual script
+#
+# Install location: <workspace>/install/pct_planner/lib/pct_planner/
+# Source location:  <workspace>/src/PCT_planner/
+# =============================================================================
+set -euo pipefail
+
+# ── Resolve source root ─────────────────────────────────────────────────
+# From install tree:  .../install/pct_planner/lib/pct_planner/<this_script>
+# Going up 4 levels reaches the workspace root, then down to src/PCT_planner.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Try to find source root: walk up from install/ to find src/PCT_planner
+_find_pct_root() {
+    local dir="$SCRIPT_DIR"
+    # Walk up to find the workspace root (contains both install/ and src/)
+    while [ "$dir" != "/" ]; do
+        if [ -d "$dir/src/PCT_planner/planner/lib" ]; then
+            echo "$dir/src/PCT_planner"
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+    done
+    # Fallback: use env var if set
+    if [ -n "${PCT_ROOT:-}" ]; then
+        echo "$PCT_ROOT"
+        return 0
+    fi
+    echo "ERROR: Cannot find PCT_planner source root." >&2
+    echo "Set PCT_ROOT environment variable to the source directory." >&2
+    return 1
+}
+
+PCT_ROOT=$(_find_pct_root)
+export PCT_ROOT
+
+# ── GTSAM + smoothing shared libraries ──────────────────────────────────
+LIB_ROOT="${PCT_ROOT}/planner/lib"
+export LD_LIBRARY_PATH="${LIB_ROOT}/3rdparty/gtsam-4.1.1/install/lib:${LIB_ROOT}/build/src/common/smoothing:${LD_LIBRARY_PATH:-}"
+
+# ── Run the Python script ───────────────────────────────────────────────
+exec python3 "${PCT_ROOT}/scripts/run_ros2_global_planner" "$@"

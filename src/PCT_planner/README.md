@@ -194,10 +194,99 @@ rviz2 -d rsc/rviz/pct_ros2.rviz
 
 ---
 
+---
+
+## Online Global Planner Mode (NEW)
+
+A self-contained ROS2 node that runs continuously: loads a PCD/tomogram once, then waits for goal inputs and publishes global paths automatically. The robot's current position (via TF) is always used as the start point.
+
+### Quick Start
+
+```bash
+./run_global_planner.sh \
+    --ros-args \
+    -p pcd_path:=/path/to/map.pcd \
+    -p tomo_path:=/path/to/map.pickle
+```
+
+Then open RViz2 and send a goal.
+
+### Sending Goals
+
+Two input methods are supported simultaneously:
+
+| Method | RViz Tool | Topic | Type | Best For |
+|--------|-----------|-------|------|----------|
+| **Goal Pose** | "2D Goal Pose" | `/goal_pose` | `geometry_msgs/PoseStamped` | Single-floor, gives target yaw |
+| **Publish Point** | "Publish Point" | `/clicked_point` | `geometry_msgs/PointStamped` | **Multi-floor** — z selects the floor |
+
+> **Recommendation:** Use `/clicked_point` for multi-floor maps. The z coordinate explicitly chooses the target floor/slice. With `/goal_pose`, a z near 0 will default to the robot's current floor.
+
+### Architecture
+
+```text
+TF: map → base_link  (robot pose, every goal arrival)
+         │
+         ├── /goal_pose (PoseStamped)
+         └── /clicked_point (PointStamped)
+                ↓
+      pct_global_planner node
+                ↓
+         /pct_path (nav_msgs/Path, smoothed trajectory)
+         /pct_astar_path (nav_msgs/Path, raw A* debug)
+         /pct_marker (Marker, goal sphere + path lines)
+         /global_points (PointCloud2, subsampled PCD)
+         /tomogram (PointCloud2, traversability layers)
+```
+
+This node **only** outputs paths. It does **not** output `/cmd_vel` or control the robot — that is the job of a separate path tracking node (e.g., `pure_pursuit_planner`).
+
+### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `pcd_path` | `rsc/pcd/clinic.pcd` | Source PCD file |
+| `tomo_path` | `rsc/tomogram/clinic.pickle` | Pre-built tomogram pickle |
+| `global_frame` | `map` | Planning frame |
+| `robot_frame` | `base_link` | Robot base frame for TF lookup |
+| `goal_pose_topic` | `/goal_pose` | Input topic for PoseStamped goals |
+| `clicked_point_topic` | `/clicked_point` | Input topic for PointStamped goals |
+| `path_topic` | `/pct_path` | Output smoothed path topic |
+| `astar_path_topic` | `/pct_astar_path` | Output raw A* path topic |
+| `use_odom_fallback` | `false` | Fall back to `/odom` if TF fails |
+| `tf_timeout_s` | `0.2` | TF lookup timeout |
+| `publish_visualization` | `true` | Publish markers |
+| `publish_tomogram` | `true` | Publish tomogram PointCloud2 |
+| `tomogram_republish_period_s` | `1.0` | Tomogram republish interval |
+| `save_trajectory` | `false` | Save trajectory as .npy on each plan |
+| `goal_z_epsilon` | `0.05` | z below this treated as "use robot floor" |
+| `allow_new_goal_during_planning` | `true` | Queue new goal if currently planning |
+
+### Failure Behaviour
+
+When planning fails, the node publishes an empty `/pct_path` (header correct, `poses=[]`) and logs the reason:
+
+| Cause | Log message |
+|-------|-------------|
+| TF unavailable | `no robot pose available` |
+| Goal out of map bounds | `point out of tomogram bounds` |
+| No valid slice for start/goal | `PCT no path found` |
+| No path exists between points | `PCT no path found` |
+
+### Prerequisites
+
+- `map → base_link` TF must be available (from FAST-LIO / open3d_loc).
+- Tomogram must be pre-built via `tomography/scripts/run_standalone.py`.
+- PCD coordinate system must align with the `map` frame.
+
+---
+
 ## Scripts Reference
 
 | Script | Description |
 |--------|-------------|
+| `run_ros2_global_planner.py` | **NEW** Online global planner node. Subscribes to `/goal_pose` and `/clicked_point`, gets start from TF, publishes `/pct_path`. |
+| `run_global_planner.sh` | **NEW** Shell launcher for the online planner. Sets up libs, sources ROS2, runs the node. |
 | `run_ros2_interactive.py` | Main interactive ROS2 node. Subscribes to `/clicked_point`, plans on each start+end pair, publishes path and markers. |
 | `launch_ros2.sh` | Launches `run_ros2_interactive.py` in the background and opens RViz2. Cleans up both processes on exit. |
 | `tomography/scripts/run_standalone.py` | Runs tomography without ROS. Saves pickle to `rsc/tomogram/`. |
