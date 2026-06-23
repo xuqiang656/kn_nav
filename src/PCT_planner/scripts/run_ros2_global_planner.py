@@ -27,20 +27,15 @@ import ctypes
 import numpy as np
 import open3d as o3d
 
-# Resolve PCT_planner source root.
-# When run via the shell wrapper (ros2 run/launch), PCT_ROOT is set.
-# When run directly from source tree, auto-detect from this file's location.
-ROOT = os.environ.get('PCT_ROOT')
-if ROOT is None:
-    # Running directly: this file is at <pct_root>/scripts/run_ros2_global_planner
-    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Set this one path manually when moving the project to another machine.
+LIB_PATH = '/home/kangneng/xq/code/work_space/kn_nav_ws/src/PCT_planner/planner/lib'
+ROOT = os.path.dirname(os.path.dirname(LIB_PATH))
 
 # ── GTSAM + smoothing libs preload (must happen before pybind11 imports) ──
-_LIB_ROOT = ROOT + '/planner/lib'
 for _lib in [
-    _LIB_ROOT + '/3rdparty/gtsam-4.1.1/install/lib/libmetis-gtsam.so',
-    _LIB_ROOT + '/3rdparty/gtsam-4.1.1/install/lib/libgtsam.so.4',
-    _LIB_ROOT + '/build/src/common/smoothing/libcommon_smoothing.so',
+    LIB_PATH + '/3rdparty/gtsam-4.1.1/install/lib/libmetis-gtsam.so',
+    LIB_PATH + '/3rdparty/gtsam-4.1.1/install/lib/libgtsam.so.4',
+    LIB_PATH + '/build/src/common/smoothing/libcommon_smoothing.so',
 ]:
     ctypes.CDLL(_lib, mode=ctypes.RTLD_GLOBAL)
 

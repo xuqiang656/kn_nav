@@ -34,4 +34,4 @@ fi
 export LD_LIBRARY_PATH="${LIB_ROOT}/3rdparty/gtsam-4.1.1/install/lib:${LIB_ROOT}/build/src/common/smoothing:${LD_LIBRARY_PATH:-}"
 
 # ── Run the global planner ──────────────────────────────────────────────────
-exec python3 "${ROOT}/scripts/run_ros2_global_planner" "$@"
+exec python3 "${ROOT}/scripts/run_ros2_global_planner.py" "$@"
