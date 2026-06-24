@@ -25,6 +25,7 @@ struct PurePursuitConfig {
     double maxVelocity = 0.7;
     double maxAngularVelocity = 1.3;
     double obstacle_th = 0.5;
+    double odom_timeout = 0.3;
 };
 
 class PurePursuitComponent {
@@ -46,8 +47,6 @@ public:
         const Pose2D& pose, 
         double velocity
     );
-
-    bool isGoalReached() const;
 
     double calcLf(double k, double current_velocity, double Lfc) const;
 

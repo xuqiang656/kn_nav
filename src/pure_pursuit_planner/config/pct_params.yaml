@@ -14,7 +14,8 @@ pure_pursuit_node:
     max_acceleration: 0.08  # max linear acceleration [m/s²]
     minCurvature: 0.0       # min curvature for speed modulation [rad/m]
     maxCurvature: 3.0       # max curvature for speed modulation [rad/m]
-    minVelocity: 0.08       # min forward speed [m/s] (tight turns)
-    maxVelocity: 0.25       # max forward speed [m/s] (straight sections)
+    minVelocity: 0.40       # min forward speed [m/s] (tight turns)
+    maxVelocity: 0.40       # max forward speed [m/s] (straight sections)
     maxAngularVelocity: 0.5 # max angular speed [rad/s]
     obstacle_th: 0.5        # obstacle distance threshold [m] (unused)
+    odom_timeout: 0.3       # stop publishing motion if odometry becomes stale [s]

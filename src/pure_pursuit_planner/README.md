@@ -24,6 +24,46 @@ This software implements a ROS 2 node for path following control of robots or au
 ### System Dependencies
 - [path_smoother](https://github.com/Arcanain/path_smoother) 
 - [arcanain_simulator](https://github.com/Arcanain/arcanain_simulator) 
+- [unitree_sdk2](https://github.com/unitreerobotics/unitree_sdk2), installed in a CMake prefix
+
+### Go2 PCT Integration
+
+Build this package with the Unitree SDK installation prefix visible to CMake:
+
+```bash
+export CMAKE_PREFIX_PATH=/opt/unitree_robotics:$CMAKE_PREFIX_PATH
+export LD_LIBRARY_PATH=/opt/unitree_robotics/lib:$LD_LIBRARY_PATH
+colcon build --packages-select pure_pursuit_planner
+```
+
+Start the PCT follower and the disabled-by-default Go2 bridge. The network
+interface argument is required:
+
+```bash
+ros2 launch pure_pursuit_planner pct_pure_pursuit.launch.py \
+  network_interface:=enp2s0
+```
+
+The bridge never changes the robot posture or gait. After manually preparing
+the Go2 and confirming that `/Odometry_open3d` and `rt/sportmodestate` are
+healthy, explicitly enable motion:
+
+```bash
+ros2 service call /go2_cmd_vel_bridge/enable std_srvs/srv/SetBool '{data: true}'
+```
+
+Disable and stop the bridge with:
+
+```bash
+ros2 service call /go2_cmd_vel_bridge/enable std_srvs/srv/SetBool '{data: false}'
+```
+
+The bridge clamps forward speed to `0.25 m/s`, yaw rate to `0.5 rad/s`, and
+disables reverse and lateral motion by default. A stale command, odometry,
+sport-state heartbeat, invalid numeric input, or SDK error sends zero velocity
+plus `StopMove()` and latches the bridge disabled until explicitly enabled
+again. Software safeguards do not replace a clear test area and a physical
+operator ready to stop the robot.
 
 ## How To Use
 ### Execution Steps

@@ -39,6 +39,11 @@ std::vector<double> PurePursuitComponent::computeVelocity(
     double velocity
 ) 
     {
+    if (cx.empty() || cx.size() != cy.size() || cx.size() != cyaw.size() ||
+        cx.size() != ck.size() || !std::isfinite(cfg_.maxCurvature) ||
+        cfg_.maxCurvature <= 0.0) {
+        return {0.0, 0.0};
+    }
     setPath(cx, cy, cyaw, ck);
     setPose(pose, velocity);
     //std::cout << "odom_sub_flag: " << odom_sub_flag << std::endl;
@@ -48,6 +53,10 @@ std::vector<double> PurePursuitComponent::computeVelocity(
     //std::cout << "cx: " << cx_.size() << std::endl;
 
     targetIndex_ = ind;
+
+    if (targetIndex_ < 0 || targetIndex_ >= static_cast<int>(cx_.size()) || Lf <= 0.0) {
+        return {0.0, 0.0};
+    }
 
     double tx = cx_[targetIndex_];
     double ty = cy_[targetIndex_];
@@ -110,10 +119,13 @@ double PurePursuitComponent::curvatureToVelocity(double curvature) const {
 }
 
 std::pair<double, double> PurePursuitComponent::isGoalReached(double v, double w) const {
+    if (cx_.empty() || cx_.size() != cy_.size()) {
+        return {0.0, 0.0};
+    }
     size_t last_index = cx_.size() - 1;
     double goal_distance = calcDistance(current_pose_.x, current_pose_.y, cx_[last_index], cy_[last_index]);
 
-    if (goal_distance < 0.1){
+    if (goal_distance <= cfg_.goal_threshold){
         v = 0.0;
         w = 0.0;
     }
@@ -125,6 +137,9 @@ double PurePursuitComponent::calcLf(double k, double current_velocity, double Lf
 }
 
 int PurePursuitComponent::calcFirstNearestPointIndex() const {
+    if (cx_.empty() || cx_.size() != cy_.size()) {
+        return -1;
+    }
     double min_distance = std::numeric_limits<double>::max();
     int min_index = -1;
     for (size_t i = 0; i < cx_.size(); i++) {
@@ -138,6 +153,9 @@ int PurePursuitComponent::calcFirstNearestPointIndex() const {
 }
 
 int PurePursuitComponent::calcOldNearestPointIndex() const {
+    if (cx_.empty() || cx_.size() != cy_.size()) {
+        return -1;
+    }
     bool count_flag = false;
     int count = 0, min_index = -1;
     double min_distance = std::numeric_limits<double>::max();
@@ -184,13 +202,25 @@ int PurePursuitComponent::calcOldNearestPointIndex() const {
 }
 
 std::pair<int, double> PurePursuitComponent::searchTargetIndex() {
-    if (odom_sub_flag){
+    if (odom_sub_flag && !cx_.empty() && cx_.size() == cy_.size()){
         double Lf = calcLf(cfg_.k, current_velocity_, cfg_.Lfc);
+        if (!std::isfinite(Lf) || Lf <= 0.0) {
+            return {-1, 0.0};
+        }
         //RCLCPP_INFO(this->get_logger(), "Lf: %lf", Lf);
         if (oldNearestPointIndex == -1) {
             oldNearestPointIndex = calcFirstNearestPointIndex();
         } else {
             oldNearestPointIndex = calcOldNearestPointIndex();
+        }
+
+        if (oldNearestPointIndex < 0 ||
+            oldNearestPointIndex >= static_cast<int>(cx_.size())) {
+            oldNearestPointIndex = calcFirstNearestPointIndex();
+        }
+        if (oldNearestPointIndex < 0 ||
+            oldNearestPointIndex >= static_cast<int>(cx_.size())) {
+            return {-1, Lf};
         }
 
         int ind = oldNearestPointIndex;
@@ -205,7 +235,7 @@ std::pair<int, double> PurePursuitComponent::searchTargetIndex() {
         return { ind, Lf };
     }else{
         std::cout << "[WARN] searchTargetIndex() called before path was set." << std::endl;
-        return {0, 0.0};
+        return {-1, 0.0};
     }
 }
 

@@ -1,6 +1,8 @@
 // Directory: pure_pursuit_planner/include/pure_pursuit_planner/pure_pursuit_node.hpp
 #pragma once
 
+#include <chrono>
+
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -20,6 +22,7 @@ private:
     void pathCallback(const nav_msgs::msg::Path::SharedPtr msg);
     void odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
     void timerCallback();
+    void publishZeroVelocity();
 
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
@@ -31,6 +34,9 @@ private:
     std::vector<double> cx_, cy_, cyaw_, ck_;
     bool path_received_ = false;
     bool pose_received_ = false;
+    bool odom_timeout_stop_published_ = false;
+
+    std::chrono::steady_clock::time_point last_odom_time_{};
 
     double current_vx_ = 0.0;
     Pose2D current_pose_;

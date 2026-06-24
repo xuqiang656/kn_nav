@@ -75,3 +75,36 @@ Note: if this workspace is cloned on another machine, rebuild PCT third-party ou
 ```bash
 src/PCT_planner/planner/build_thirdparty.sh
 ```
+
+
+已经了解完成，没有修改代码。
+
+当前导航链路是：
+
+```text
+MID360 → FAST-LIO → /Odometry_loc、点云
+                    ↓
+Open3D Localization → /Odometry_open3d + map→base_link TF
+                    ↓
+PCT Global Planner ← /goal_pose 或 /clicked_point
+                    ↓
+                /pct_path
+                    ↓
+Pure Pursuit → /cmd_vel
+                    ↓
+Go2 Safety Bridge → Unitree SportClient::Move
+```
+
+几个关键认识：
+
+- 定位统一在 `map` 坐标系，输出 `/Odometry_open3d`，与 PCT 路径坐标一致。
+- PCT 使用 TF 中机器狗当前位置作为起点，发布平滑路径 `/pct_path`。
+- Pure Pursuit 当前只跟踪路径的 XY，路径 Z 主要用于 PCT 楼层选择，并未进入机器狗姿态或上下楼控制。
+- 控制频率为 10 Hz，当前目标速度配置为 `0.4 m/s`，角速度最终由 bridge 限制在 `±0.5 rad/s`。
+- Go2 bridge 默认禁用，需要手动调用 `/go2_cmd_vel_bridge/enable`；定位、`cmd_vel` 或运动状态超时都会停车并锁回禁用状态。
+- 目前没有接入局部避障，`obstacle_th` 等参数尚未真正参与控制。
+- 完整系统仍分成定位、PCT、跟踪控制三套启动入口，还不是一键 bringup。
+- 定位地图和 PCT 地面地图是不同文件，后续必须持续保证两者原点、朝向和尺度完全一致。
+- 工作区构建记录显示 13 个包已成功编译；仓库中存在现有未提交的 PCT/Pure Pursuit/Go2 安全桥改动，我已原样保留。
+
+整体上，这已经是“全局定位 → 全局路径 → 二维路径跟踪 → 安全速度下发”的可运行骨架。下一步可以在这个基础上继续排查实机跟踪、坐标一致性、局部避障或整套启动编排。

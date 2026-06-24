@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Interactive RViz2 runner for planning from two Publish Point clicks."""
 import argparse
+import ctypes
 import os
 import pickle
 import subprocess
@@ -13,24 +14,13 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PLANNER_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..'))
 PACKAGE_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '../..'))
 
-GTSAM_LIB = os.path.join(PLANNER_ROOT, 'lib/3rdparty/gtsam-4.1.1/install/lib')
-SMOOTHING_LIB = os.path.join(PLANNER_ROOT, 'lib/build/src/common/smoothing')
-
-
-def ensure_runtime_library_path():
-    paths = [GTSAM_LIB, SMOOTHING_LIB]
-    current = os.environ.get('LD_LIBRARY_PATH', '').split(os.pathsep)
-    missing = [path for path in paths if path not in current]
-    if not missing:
-        return
-
-    os.environ['LD_LIBRARY_PATH'] = os.pathsep.join(
-        [path for path in current if path] + missing
-    )
-    os.execvpe(sys.executable, [sys.executable] + sys.argv, os.environ)
-
-
-ensure_runtime_library_path()
+LIB_PATH = os.path.join(PLANNER_ROOT, 'lib')
+for library in (
+    'libmetis-gtsam.so',
+    'libgtsam.so.4',
+    'libcommon_smoothing.so',
+):
+    ctypes.CDLL(os.path.join(LIB_PATH, library), mode=ctypes.RTLD_GLOBAL)
 
 sys.path.insert(0, PLANNER_ROOT)
 sys.path.insert(0, os.path.join(PLANNER_ROOT, 'lib'))

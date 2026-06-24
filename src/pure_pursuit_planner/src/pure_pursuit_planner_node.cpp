@@ -6,6 +6,8 @@
 //   - Path updates: old path_subscribe_flag removed → new path always replaces old
 
 #include "pure_pursuit_planner/pure_pursuit_planner_node.hpp"
+#include <cmath>
+#include <stdexcept>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
@@ -98,11 +100,33 @@ void PurePursuitNode::declareAndGetParameters() {
     config_.maxVelocity = this->declare_parameter("maxVelocity", 0.5);
     config_.maxAngularVelocity = this->declare_parameter("maxAngularVelocity", 0.5);
     config_.obstacle_th = this->declare_parameter("obstacle_th", 0.5);
+    config_.odom_timeout = this->declare_parameter("odom_timeout", 0.3);
+    if (!std::isfinite(config_.goal_threshold) || config_.goal_threshold <= 0.0) {
+        throw std::invalid_argument("goal_threshold must be finite and greater than zero");
+    }
+    if (!std::isfinite(config_.Lfc) || config_.Lfc <= 0.0) {
+        throw std::invalid_argument("Lfc must be finite and greater than zero");
+    }
+    if (!std::isfinite(config_.minVelocity) || !std::isfinite(config_.maxVelocity) ||
+        config_.minVelocity < 0.0 || config_.minVelocity > config_.maxVelocity) {
+        throw std::invalid_argument("velocity limits must be finite, non-negative, and ordered");
+    }
+    if (!std::isfinite(config_.maxCurvature) || config_.maxCurvature <= 0.0) {
+        throw std::invalid_argument("maxCurvature must be finite and greater than zero");
+    }
+    if (!std::isfinite(config_.odom_timeout) || config_.odom_timeout <= 0.0) {
+        throw std::invalid_argument("odom_timeout must be finite and greater than zero");
+    }
 }
 
 void PurePursuitNode::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
     if (msg->poses.empty()) {
-        RCLCPP_WARN(this->get_logger(), "Received empty /pct_path — ignoring.");
+        cx_.clear(); cy_.clear(); cyaw_.clear(); ck_.clear();
+        path_received_ = false;
+        planner_.odom_sub_flag = false;
+        planner_.oldNearestPointIndex = -1;
+        publishZeroVelocity();
+        RCLCPP_WARN(this->get_logger(), "Received empty /pct_path — path cleared and robot stopped.");
         return;
     }
 
@@ -119,6 +143,17 @@ void PurePursuitNode::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
     // Step 1: extract raw x/y from PCT path
     std::vector<double> raw_x, raw_y;
     for (const auto& pose : msg->poses) {
+        if (!std::isfinite(pose.pose.position.x) ||
+            !std::isfinite(pose.pose.position.y)) {
+            cx_.clear(); cy_.clear(); cyaw_.clear(); ck_.clear();
+            path_received_ = false;
+            planner_.odom_sub_flag = false;
+            planner_.oldNearestPointIndex = -1;
+            publishZeroVelocity();
+            RCLCPP_ERROR(this->get_logger(),
+                "Received non-finite /pct_path point — path cleared and robot stopped.");
+            return;
+        }
         raw_x.push_back(pose.pose.position.x);
         raw_y.push_back(pose.pose.position.y);
     }
@@ -149,8 +184,19 @@ void PurePursuitNode::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
 void PurePursuitNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
     // Odometry_open3d: header.frame_id = 'map', child_frame_id = 'base_link'
     // Position is directly in map frame → matches /pct_path coordinates
-    current_pose_.x = msg->pose.pose.position.x;
-    current_pose_.y = msg->pose.pose.position.y;
+    const auto& position = msg->pose.pose.position;
+    const auto& orientation = msg->pose.pose.orientation;
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+        !std::isfinite(orientation.x) || !std::isfinite(orientation.y) ||
+        !std::isfinite(orientation.z) || !std::isfinite(orientation.w) ||
+        !std::isfinite(msg->twist.twist.linear.x)) {
+        RCLCPP_ERROR(this->get_logger(),
+            "Ignoring /Odometry_open3d containing non-finite values.");
+        return;
+    }
+
+    current_pose_.x = position.x;
+    current_pose_.y = position.y;
     current_vx_ = msg->twist.twist.linear.x;
 
     tf2::Quaternion quat;
@@ -161,18 +207,51 @@ void PurePursuitNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
 
     current_pose_.yaw = yaw_tmp;
 
+    if (!std::isfinite(current_pose_.yaw)) {
+        RCLCPP_ERROR(this->get_logger(),
+            "Ignoring /Odometry_open3d with invalid orientation.");
+        return;
+    }
+
     pose_received_ = true;
+    last_odom_time_ = std::chrono::steady_clock::now();
+    odom_timeout_stop_published_ = false;
 }
 
 void PurePursuitNode::timerCallback() {
     if (!path_received_ || !pose_received_) return;
 
+    const double odom_age = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - last_odom_time_).count();
+    if (odom_age > config_.odom_timeout) {
+        if (!odom_timeout_stop_published_) {
+            publishZeroVelocity();
+            odom_timeout_stop_published_ = true;
+            RCLCPP_ERROR(this->get_logger(),
+                "/Odometry_open3d timed out after %.3f s — publishing zero velocity.", odom_age);
+        }
+        return;
+    }
+
     auto cmd_velocity = planner_.computeVelocity(cx_, cy_, cyaw_, ck_, current_pose_, current_vx_);
+
+    if (cmd_velocity.size() != 2 || !std::isfinite(cmd_velocity[0]) ||
+        !std::isfinite(cmd_velocity[1])) {
+        publishZeroVelocity();
+        RCLCPP_ERROR(this->get_logger(),
+            "Pure pursuit produced an invalid command — publishing zero velocity.");
+        return;
+    }
 
     geometry_msgs::msg::Twist cmd_vel;
     cmd_vel.linear.x = cmd_velocity[0];
     cmd_vel.angular.z = cmd_velocity[1];
 
+    cmd_vel_pub_->publish(cmd_vel);
+}
+
+void PurePursuitNode::publishZeroVelocity() {
+    geometry_msgs::msg::Twist cmd_vel;
     cmd_vel_pub_->publish(cmd_vel);
 }
 

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 project(pure_pursuit_planner)
 
-enable_testing() 
+enable_testing()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -13,24 +13,29 @@ find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(visualization_msgs REQUIRED)
+find_package(unitree_sdk2 REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # pure_pursuit_planner
 add_library(pure_pursuit_planner_library
+  src/go2_safety_controller.cpp
   src/pure_pursuit_planner_node.cpp
   src/pure_pursuit_planner_component.cpp
 )
 add_executable(pure_pursuit_planner src/pure_pursuit_planner.cpp)
+add_executable(go2_cmd_vel_bridge src/go2_cmd_vel_bridge.cpp)
 ament_target_dependencies(pure_pursuit_planner_library
-  rclcpp 
-  geometry_msgs 
-  nav_msgs 
-  tf2_geometry_msgs 
+  rclcpp
+  geometry_msgs
+  nav_msgs
+  tf2_geometry_msgs
   tf2_ros
   visualization_msgs
 )
@@ -40,10 +45,22 @@ target_include_directories(pure_pursuit_planner_library PUBLIC
 
 
 target_link_libraries(pure_pursuit_planner PRIVATE pure_pursuit_planner_library)
+ament_target_dependencies(go2_cmd_vel_bridge
+  geometry_msgs
+  nav_msgs
+  rclcpp
+  std_msgs
+  std_srvs
+)
+target_link_libraries(go2_cmd_vel_bridge
+  pure_pursuit_planner_library
+  unitree_sdk2
+)
 
 # Install Cpp executables
 install(TARGETS
   pure_pursuit_planner
+  go2_cmd_vel_bridge
   pure_pursuit_planner_library
   DESTINATION lib/${PROJECT_NAME}
 )
@@ -85,7 +102,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_pp_all_functions
     test/test_all_functions_csv.cpp
   )
-  if (TARGET test_pp_all_functions)
+  if(TARGET test_pp_all_functions)
     target_link_libraries(test_pp_all_functions pure_pursuit_planner_library)
     target_compile_features(test_pp_all_functions PUBLIC cxx_std_14)
     target_include_directories(test_pp_all_functions PUBLIC
@@ -100,6 +117,22 @@ if(BUILD_TESTING)
     set_tests_properties(test_pp_all_functions PROPERTIES
       WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/test/test_data"
     )
+  endif()
+
+  ament_add_gtest(test_go2_safety_controller
+    test/test_go2_safety_controller.cpp
+  )
+  if(TARGET test_go2_safety_controller)
+    target_link_libraries(test_go2_safety_controller pure_pursuit_planner_library)
+    target_include_directories(test_go2_safety_controller PUBLIC include)
+  endif()
+
+  ament_add_gtest(test_pp_safety
+    test/test_pp_safety.cpp
+  )
+  if(TARGET test_pp_safety)
+    target_link_libraries(test_pp_safety pure_pursuit_planner_library)
+    target_include_directories(test_pp_safety PUBLIC include)
   endif()
 
   # カバレッジ生成ターゲットの追加
