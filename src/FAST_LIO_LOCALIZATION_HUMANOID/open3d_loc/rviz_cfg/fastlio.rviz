@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /TF1/Frames1
         - //pct_path1
+        - /GridMap1
       Splitter Ratio: 0.5743380784988403
     Tree Height: 625
   - Class: rviz_common/Selection
@@ -193,7 +194,7 @@ Visualization Manager:
     - Alpha: 1
       Class: rviz_default_plugins/Polygon
       Color: 25; 255; 0
-      Enabled: true
+      Enabled: false
       Name: Polygon
       Topic:
         Depth: 5
@@ -202,7 +203,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /footprint_polygon
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: false
       Autocompute Value Bounds:
@@ -215,7 +216,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: Intensity
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: true
       Max Color: 255; 255; 255
       Max Intensity: 60
@@ -236,7 +237,7 @@ Visualization Manager:
         Value: /tomogram
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Alpha: 10
       Autocompute Intensity Bounds: true
       Class: grid_map_rviz_plugin/GridMap
@@ -269,7 +270,7 @@ Visualization Manager:
       Color: 200; 200; 200
       Color Layer: elevation
       Color Transformer: GridMapLayer
-      Enabled: true
+      Enabled: false
       Height Layer: elevation
       Height Transformer: GridMapLayer
       History Length: 1
@@ -288,7 +289,7 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /fastdem/mapping/gridmap
       Use Rainbow: true
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
@@ -316,6 +317,32 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /pct_path
+      Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Class: grid_map_rviz_plugin/GridMap
+      Color: 200; 200; 200
+      Color Layer: elevation
+      Color Transformer: GridMapLayer
+      Enabled: true
+      Height Layer: elevation
+      Height Transformer: GridMapLayer
+      History Length: 1
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 10
+      Min Color: 0; 0; 0
+      Min Intensity: 0
+      Name: GridMap
+      Show Grid Lines: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /art_planner/map
+      Use Rainbow: true
       Value: true
   Enabled: true
   Global Options:
@@ -363,16 +390,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 43.828548431396484
+      Distance: 15.09108829498291
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 1.1049985885620117
-        Y: 0.13504359126091003
-        Z: -7.203232765197754
+        X: 2.63106369972229
+        Y: -0.42686745524406433
+        Z: -7.189093112945557
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false

@@ -24,6 +24,10 @@ struct PurePursuitConfig {
     double minVelocity = 0.4;
     double maxVelocity = 0.7;
     double maxAngularVelocity = 1.3;
+    double rotate_to_path_threshold = 1.047;
+    double rotate_to_path_tolerance = 0.349;
+    double goal_yaw_tolerance = 0.175;
+    double rotate_to_heading_gain = 1.0;
     double obstacle_th = 0.5;
     double odom_timeout = 0.3;
 };
@@ -70,6 +74,8 @@ public:
 
 private:
     double calcDistance(double x1, double y1, double x2, double y2) const;
+    double normalizeAngle(double angle) const;
+    double calculateRotationAngularVelocity(double yaw_error) const;
     std::pair<double, std::pair<double, double>> calcClosestPointOnPath();
     std::pair<double, double> calcAcceleration(double current_vel);
 
@@ -90,6 +96,7 @@ private:
     double previous_velocity_ = 0.0;
     double previous_time_ = 0.0;
     bool goal_reached_ = false;
+    bool rotating_to_path_ = false;
 
     double init_x_ = 0.0;
     double init_y_ = 0.0;

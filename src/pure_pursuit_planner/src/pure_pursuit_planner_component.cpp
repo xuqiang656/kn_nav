@@ -46,6 +46,18 @@ std::vector<double> PurePursuitComponent::computeVelocity(
     }
     setPath(cx, cy, cyaw, ck);
     setPose(pose, velocity);
+
+    const double goal_distance = calcDistance(
+        current_pose_.x, current_pose_.y, cx_.back(), cy_.back());
+    if (goal_distance <= cfg_.goal_threshold) {
+        rotating_to_path_ = false;
+        const double goal_yaw_error = normalizeAngle(cyaw_.back() - current_pose_.yaw);
+        if (std::abs(goal_yaw_error) <= cfg_.goal_yaw_tolerance) {
+            return {0.0, 0.0};
+        }
+        return {0.0, calculateRotationAngularVelocity(goal_yaw_error)};
+    }
+
     //std::cout << "odom_sub_flag: " << odom_sub_flag << std::endl;
     auto [ind, Lf] = searchTargetIndex();
     //std::cout << "ind: " << ind << std::endl;
@@ -66,9 +78,18 @@ std::vector<double> PurePursuitComponent::computeVelocity(
     double dx = tx - current_pose_.x;
     double dy = ty - current_pose_.y;
 
-    double alpha = std::atan2(dy, dx) - current_pose_.yaw;
+    double alpha = normalizeAngle(std::atan2(dy, dx) - current_pose_.yaw);
 
-    alpha = alphaExceptionHandling(alpha);
+    if (rotating_to_path_) {
+        if (std::abs(alpha) <= cfg_.rotate_to_path_tolerance) {
+            rotating_to_path_ = false;
+        } else {
+            return {0.0, calculateRotationAngularVelocity(alpha)};
+        }
+    } else if (std::abs(alpha) >= cfg_.rotate_to_path_threshold) {
+        rotating_to_path_ = true;
+        return {0.0, calculateRotationAngularVelocity(alpha)};
+    }
 
     double curvature = std::max(cfg_.minCurvature, std::min(std::abs(target_curvature), cfg_.maxCurvature));
     //std::cout << "curvature: " << std::abs(curvature) << std::endl;
@@ -82,7 +103,7 @@ std::vector<double> PurePursuitComponent::computeVelocity(
 
     //double w = v * std::sin(alpha) / Lf;
     double w = calculateAngularVelocity(v, alpha, Lf);
-    //w = std::clamp(w, -cfg_.maxAngularVelocity, cfg_.maxAngularVelocity);
+    w = std::clamp(w, -cfg_.maxAngularVelocity, cfg_.maxAngularVelocity);
 
     std::tie(v, w) = isGoalReached(v, w);
 
@@ -111,6 +132,19 @@ double PurePursuitComponent::alphaExceptionHandling(double tempAlpha) const {
 
 double PurePursuitComponent::calculateAngularVelocity(double v, double alpha, double Lf) const {
     return v * std::sin(alpha) / Lf;
+}
+
+
+double PurePursuitComponent::normalizeAngle(double angle) const {
+    return std::atan2(std::sin(angle), std::cos(angle));
+}
+
+
+double PurePursuitComponent::calculateRotationAngularVelocity(double yaw_error) const {
+    return std::clamp(
+        cfg_.rotate_to_heading_gain * yaw_error,
+        -cfg_.maxAngularVelocity,
+        cfg_.maxAngularVelocity);
 }
 
 

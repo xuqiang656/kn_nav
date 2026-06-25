@@ -46,7 +46,7 @@ Use without motion cost (`lazy_prm_star_min_update`) [Paper link](https://www.re
   author={Wellhausen, Lorenz and Hutter, Marco},
   booktitle={2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS 2021)},
   year={2021}
-}
+
 ```
 
 ## Build

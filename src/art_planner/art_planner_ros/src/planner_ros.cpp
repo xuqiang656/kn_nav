@@ -103,17 +103,28 @@ bool PlannerRos::getCurrentRobotPose(geometry_msgs::msg::PoseStamped* pose) cons
 
 
 void PlannerRos::planFromCurrentRobotPose() {
+  std::string map_frame;
+  {
+    std::lock_guard<std::mutex> lock(map_queue_mutex_);
+    map_frame = map_queue_.header.frame_id;
+  }
+  if (map_frame.empty()) {
+    RCLCPP_WARN(node_->get_logger(), "No map frame received yet. Not planning.");
+    publishFeedback(Feedback::NO_MAP);
+    return;
+  }
+
   // Convert goal pose to map frame (map might drift w.r.t goal).
   geometry_msgs::msg::PoseStamped pose_goal_transformed;
   try {
     std::lock_guard<std::mutex> lock(pose_goal_mutex_);
-    if (pose_goal_.header.frame_id == map_queue_.header.frame_id) {
+    if (pose_goal_.header.frame_id == map_frame) {
       pose_goal_transformed = pose_goal_;
     } else {
       pose_goal_.header.stamp = rclcpp::Time(0, 0, node_->get_clock()->get_clock_type());
       tf_buffer_.transform(pose_goal_,
                            pose_goal_transformed,
-                           map_queue_.header.frame_id,
+                           map_frame,
                            tf2::durationFromSec(0.1));
     }
   } catch (tf2::TransformException& ex) {
@@ -175,8 +186,19 @@ rclcpp_action::GoalResponse PlannerRos::goalCallback(const rclcpp_action::GoalUU
 rclcpp_action::CancelResponse PlannerRos::cancelGoalCallback(const std::shared_ptr<GoalHandlePlanToGoal> goal_handle) {
   RCLCPP_INFO_STREAM(node_->get_logger(), "Stop continuous planning requested.");
   stopPlanningContinuously();
-  if (goal_handle && goal_handle->is_active()) {
-    goal_handle->canceled(std::make_shared<PlanToGoal::Result>());
+  if (goal_handle) {
+    auto logger = node_->get_logger();
+    std::thread([goal_handle, logger]() {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      if (!goal_handle->is_canceling()) {
+        return;
+      }
+      try {
+        goal_handle->canceled(std::make_shared<PlanToGoal::Result>());
+      } catch (const rclcpp::exceptions::RCLError& ex) {
+        RCLCPP_DEBUG(logger, "Failed to mark ART goal canceled: %s", ex.what());
+      }
+    }).detach();
   }
   return rclcpp_action::CancelResponse::ACCEPT;
 }

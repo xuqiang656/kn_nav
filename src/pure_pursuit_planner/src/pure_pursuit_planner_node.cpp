@@ -99,6 +99,13 @@ void PurePursuitNode::declareAndGetParameters() {
     config_.minVelocity = this->declare_parameter("minVelocity", 0.1);
     config_.maxVelocity = this->declare_parameter("maxVelocity", 0.5);
     config_.maxAngularVelocity = this->declare_parameter("maxAngularVelocity", 0.5);
+    config_.rotate_to_path_threshold =
+        this->declare_parameter("rotate_to_path_threshold", 1.047);
+    config_.rotate_to_path_tolerance =
+        this->declare_parameter("rotate_to_path_tolerance", 0.349);
+    config_.goal_yaw_tolerance = this->declare_parameter("goal_yaw_tolerance", 0.175);
+    config_.rotate_to_heading_gain =
+        this->declare_parameter("rotate_to_heading_gain", 1.0);
     config_.obstacle_th = this->declare_parameter("obstacle_th", 0.5);
     config_.odom_timeout = this->declare_parameter("odom_timeout", 0.3);
     if (!std::isfinite(config_.goal_threshold) || config_.goal_threshold <= 0.0) {
@@ -113,6 +120,25 @@ void PurePursuitNode::declareAndGetParameters() {
     }
     if (!std::isfinite(config_.maxCurvature) || config_.maxCurvature <= 0.0) {
         throw std::invalid_argument("maxCurvature must be finite and greater than zero");
+    }
+    if (!std::isfinite(config_.maxAngularVelocity) || config_.maxAngularVelocity <= 0.0) {
+        throw std::invalid_argument("maxAngularVelocity must be finite and greater than zero");
+    }
+    if (!std::isfinite(config_.rotate_to_path_threshold) ||
+        !std::isfinite(config_.rotate_to_path_tolerance) ||
+        config_.rotate_to_path_tolerance <= 0.0 ||
+        config_.rotate_to_path_tolerance >= config_.rotate_to_path_threshold ||
+        config_.rotate_to_path_threshold > M_PI) {
+        throw std::invalid_argument(
+            "rotation thresholds must satisfy 0 < tolerance < threshold <= pi");
+    }
+    if (!std::isfinite(config_.goal_yaw_tolerance) ||
+        config_.goal_yaw_tolerance <= 0.0 || config_.goal_yaw_tolerance > M_PI) {
+        throw std::invalid_argument("goal_yaw_tolerance must be in (0, pi]");
+    }
+    if (!std::isfinite(config_.rotate_to_heading_gain) ||
+        config_.rotate_to_heading_gain <= 0.0) {
+        throw std::invalid_argument("rotate_to_heading_gain must be finite and positive");
     }
     if (!std::isfinite(config_.odom_timeout) || config_.odom_timeout <= 0.0) {
         throw std::invalid_argument("odom_timeout must be finite and greater than zero");
@@ -159,8 +185,28 @@ void PurePursuitNode::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
     }
 
     // Step 2: compute cyaw (tangent heading) from adjacent points
-    //         PCT publishes identity quaternion, so we compute correct heading
+    //         and preserve the explicit final goal orientation from the path.
     cyaw_ = compute_yaw_from_path(raw_x, raw_y);
+    const auto& final_orientation = msg->poses.back().pose.orientation;
+    const double quaternion_norm = std::sqrt(
+        final_orientation.x * final_orientation.x +
+        final_orientation.y * final_orientation.y +
+        final_orientation.z * final_orientation.z +
+        final_orientation.w * final_orientation.w);
+    if (std::isfinite(quaternion_norm) && quaternion_norm > 1e-6) {
+        tf2::Quaternion final_quaternion;
+        tf2::fromMsg(final_orientation, final_quaternion);
+        final_quaternion.normalize();
+        tf2::Matrix3x3 final_rotation(final_quaternion);
+        double final_roll, final_pitch, final_yaw;
+        final_rotation.getRPY(final_roll, final_pitch, final_yaw);
+        if (std::isfinite(final_yaw)) {
+            cyaw_.back() = final_yaw;
+        }
+    } else {
+        RCLCPP_WARN(this->get_logger(),
+            "Final path orientation is invalid; using the final path tangent.");
+    }
 
     // Step 3: compute ck (curvature) from path geometry
     //         PCT stores z-height in position.z, NOT curvature
@@ -177,7 +223,7 @@ void PurePursuitNode::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
 
     RCLCPP_INFO(this->get_logger(),
         "Received /pct_path: %zu waypoints, frame=%s. "
-        "Computed yaw and curvature from geometry.",
+        "Computed tangent yaw and curvature and preserved final goal yaw.",
         cx_.size(), msg->header.frame_id.c_str());
 }
 
@@ -219,7 +265,7 @@ void PurePursuitNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
 }
 
 void PurePursuitNode::timerCallback() {
-    if (!path_received_ || !pose_received_) return;
+    if (!pose_received_) return;
 
     const double odom_age = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - last_odom_time_).count();
@@ -230,6 +276,13 @@ void PurePursuitNode::timerCallback() {
             RCLCPP_ERROR(this->get_logger(),
                 "/Odometry_open3d timed out after %.3f s — publishing zero velocity.", odom_age);
         }
+        return;
+    }
+
+    // Keep the bridge enabled after an empty path by refreshing it with a
+    // zero command. No bridge-specific mode or service is needed.
+    if (!path_received_) {
+        publishZeroVelocity();
         return;
     }
 

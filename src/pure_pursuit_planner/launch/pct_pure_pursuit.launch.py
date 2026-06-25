@@ -30,6 +30,7 @@ def generate_launch_description():
 
     network_interface_argument = DeclareLaunchArgument(
         'network_interface',
+        default_value='eth0',
         description='Network interface connected to the Go2, e.g. enp2s0',
     )
 

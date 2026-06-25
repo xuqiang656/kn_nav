@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <vector>
 
 #include "pure_pursuit_planner/pure_pursuit_planner_component.hpp"
@@ -43,6 +44,63 @@ TEST(PurePursuitSafety, SearchOnEmptyPathReturnsInvalidIndexSafely)
 
   EXPECT_EQ(index, -1);
   EXPECT_DOUBLE_EQ(lookahead, 0.0);
+}
+
+TEST(PurePursuitSafety, RotatesInPlaceWhenPathTargetIsBehind)
+{
+  PurePursuitConfig config;
+  config.Lfc = 0.5;
+  config.minVelocity = 0.2;
+  config.maxVelocity = 0.2;
+  config.maxAngularVelocity = 0.5;
+  config.rotate_to_path_threshold = M_PI / 3.0;
+  config.rotate_to_path_tolerance = 0.35;
+  config.rotate_to_heading_gain = 1.0;
+  PurePursuitComponent planner(config);
+
+  const std::vector<double> x{-1.0, -2.0};
+  const std::vector<double> y{0.0, 0.0};
+  const std::vector<double> yaw{M_PI, M_PI};
+  const std::vector<double> curvature{0.0, 0.0};
+
+  auto command = planner.computeVelocity(
+    x, y, yaw, curvature, Pose2D{0.0, 0.0, 0.0}, 0.0);
+  EXPECT_DOUBLE_EQ(command[0], 0.0);
+  EXPECT_DOUBLE_EQ(command[1], 0.5);
+
+  command = planner.computeVelocity(
+    x, y, yaw, curvature, Pose2D{0.0, 0.0, 2.70}, 0.0);
+  EXPECT_DOUBLE_EQ(command[0], 0.0);
+  EXPECT_GT(command[1], 0.0);
+
+  command = planner.computeVelocity(
+    x, y, yaw, curvature, Pose2D{0.0, 0.0, 2.85}, 0.0);
+  EXPECT_GT(command[0], 0.0);
+}
+
+TEST(PurePursuitSafety, AlignsFinalYawBeforeReportingZeroCommand)
+{
+  PurePursuitConfig config;
+  config.goal_threshold = 0.35;
+  config.goal_yaw_tolerance = 0.175;
+  config.maxAngularVelocity = 0.5;
+  config.rotate_to_heading_gain = 1.0;
+  PurePursuitComponent planner(config);
+
+  const std::vector<double> x{0.0, 1.0};
+  const std::vector<double> y{0.0, 0.0};
+  const std::vector<double> yaw{0.0, M_PI / 2.0};
+  const std::vector<double> curvature{0.0, 0.0};
+
+  auto command = planner.computeVelocity(
+    x, y, yaw, curvature, Pose2D{1.0, 0.0, 0.0}, 0.0);
+  EXPECT_DOUBLE_EQ(command[0], 0.0);
+  EXPECT_DOUBLE_EQ(command[1], 0.5);
+
+  command = planner.computeVelocity(
+    x, y, yaw, curvature, Pose2D{1.0, 0.0, 1.50}, 0.0);
+  EXPECT_DOUBLE_EQ(command[0], 0.0);
+  EXPECT_DOUBLE_EQ(command[1], 0.0);
 }
 
 }  // namespace
