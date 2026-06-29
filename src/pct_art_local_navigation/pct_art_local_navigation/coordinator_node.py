@@ -13,7 +13,7 @@ from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from pct_art_local_navigation.coordinator_logic import (
@@ -72,6 +72,9 @@ class PctArtCoordinator(Node):
             PoseStamped, self.local_goal_topic, latched_qos
         )
         self._status_pub = self.create_publisher(String, self.status_topic, latched_qos)
+        self._final_approach_pub = self.create_publisher(
+            Bool, '/pct_art_local_navigation/final_approach', latched_qos
+        )
 
         self.create_subscription(Path, self.global_path_topic, self._global_path_cb, 10)
         self.create_subscription(Path, self.art_path_topic, self._art_path_cb, 10)
@@ -92,6 +95,7 @@ class PctArtCoordinator(Node):
         self._local_goal_index: Optional[int] = None
         self._last_art_path_time = None
         self._motion_path_active = False
+        self._final_approach_active: Optional[bool] = None
 
         self._goal_handle = None
         self._send_future = None
@@ -102,6 +106,7 @@ class PctArtCoordinator(Node):
         self._state = ''
         self._state_reason = ''
         self._set_state(CoordinatorState.WAIT_GLOBAL_PATH, 'waiting for /pct_path')
+        self._publish_final_approach(False)
         self.create_timer(1.0 / self.update_rate, self._update)
 
         self.get_logger().info(
@@ -136,6 +141,7 @@ class PctArtCoordinator(Node):
         self.declare_parameter('progress_forward_search_points', 200)
         self.declare_parameter('maximum_path_start_distance', 1.0)
         self.declare_parameter('maximum_path_goal_distance', 0.8)
+        self.declare_parameter('final_maximum_path_goal_distance', 0.25)
         self.declare_parameter('map_timeout', 1.0)
         self.declare_parameter('localization_timeout', 0.5)
         self.declare_parameter('art_path_timeout', 2.0)
@@ -176,6 +182,9 @@ class PctArtCoordinator(Node):
         self.progress_forward_search_points = int(get('progress_forward_search_points'))
         self.maximum_path_start_distance = float(get('maximum_path_start_distance'))
         self.maximum_path_goal_distance = float(get('maximum_path_goal_distance'))
+        self.final_maximum_path_goal_distance = float(
+            get('final_maximum_path_goal_distance')
+        )
         self.map_timeout = float(get('map_timeout'))
         self.localization_timeout = float(get('localization_timeout'))
         self.art_path_timeout = float(get('art_path_timeout'))
@@ -216,6 +225,7 @@ class PctArtCoordinator(Node):
             'localization_timeout': self.localization_timeout,
             'art_path_timeout': self.art_path_timeout,
             'tf_timeout': self.tf_timeout,
+            'final_maximum_path_goal_distance': self.final_maximum_path_goal_distance,
             'path_min_point_spacing': self.path_min_point_spacing,
             'path_resample_spacing': self.path_resample_spacing,
             'path_max_deviation': self.path_max_deviation,
@@ -252,6 +262,7 @@ class PctArtCoordinator(Node):
             self._global_points = []
             self._progress_index = None
             self._local_goal_msg = None
+            self._publish_final_approach(False)
             self._stop(CoordinatorState.WAIT_GLOBAL_PATH, 'received empty global path')
             self._cancel_active_goal()
             return
@@ -269,6 +280,8 @@ class PctArtCoordinator(Node):
 
         if self._motion_path_active:
             self._publish_empty_path()
+        else:
+            self._publish_final_approach(False)
         self._global_path_msg = message
         self._global_points = points
         self._progress_index = None
@@ -313,12 +326,18 @@ class PctArtCoordinator(Node):
             self._local_goal_msg.pose.position.x,
             self._local_goal_msg.pose.position.y,
         )
+        final_goal = self._is_final_local_goal()
+        maximum_goal_distance = (
+            self.final_maximum_path_goal_distance
+            if final_goal
+            else self.maximum_path_goal_distance
+        )
         valid, reason = validate_local_path(
             points,
             self._robot_point,
             local_goal,
             self.maximum_path_start_distance,
-            self.maximum_path_goal_distance,
+            maximum_goal_distance,
         )
         if not valid:
             self._stop(CoordinatorState.BLOCKED, reason)
@@ -336,7 +355,7 @@ class PctArtCoordinator(Node):
                 self._robot_point,
                 local_goal,
                 self.maximum_path_start_distance,
-                self.maximum_path_goal_distance,
+                maximum_goal_distance,
             )
             if not valid:
                 self._stop(CoordinatorState.BLOCKED, f'smoothed path invalid: {reason}')
@@ -358,6 +377,7 @@ class PctArtCoordinator(Node):
         else:
             message.header.stamp = self.get_clock().now().to_msg()
             output_message = message
+        self._publish_final_approach(final_goal)
         self._local_path_pub.publish(output_message)
         self._last_art_path_time = self.get_clock().now()
         self._motion_path_active = True
@@ -476,6 +496,25 @@ class PctArtCoordinator(Node):
                 CoordinatorState.TRACKING
                 if self._motion_path_active else CoordinatorState.PLANNING,
                 f'aligning final yaw: error={goal_yaw_error:.3f} rad',
+            )
+            return
+
+        if self._is_final_local_goal():
+            if (
+                self._motion_path_active
+                and self._last_art_path_time is not None
+                and (now - self._last_art_path_time).nanoseconds * 1e-9
+                > self.art_path_timeout
+            ):
+                self._stop(CoordinatorState.BLOCKED, 'ART path timed out')
+                return
+            if self._pending_goal is not None and self._goal_handle is None:
+                self._send_pending_goal()
+            self._set_state(
+                CoordinatorState.TRACKING
+                if self._motion_path_active else CoordinatorState.PLANNING,
+                f'holding final approach: distance={goal_distance:.3f} m, '
+                f'yaw_error={goal_yaw_error:.3f} rad',
             )
             return
 
@@ -692,6 +731,7 @@ class PctArtCoordinator(Node):
             self._pending_goal = None
             self._local_goal_msg = None
             self._local_goal_index = None
+            self._publish_final_approach(False)
             self._cancel_active_goal()
         self._set_state(state, reason)
 
@@ -702,6 +742,22 @@ class PctArtCoordinator(Node):
         self._local_path_pub.publish(message)
         self._motion_path_active = False
         self._last_art_path_time = None
+        self._publish_final_approach(False)
+
+    def _is_final_local_goal(self) -> bool:
+        return bool(
+            self._global_points
+            and self._local_goal_index is not None
+            and self._local_goal_index == len(self._global_points) - 1
+        )
+
+    def _publish_final_approach(self, active: bool):
+        if active == self._final_approach_active:
+            return
+        self._final_approach_active = active
+        message = Bool()
+        message.data = active
+        self._final_approach_pub.publish(message)
 
     def _set_state(self, state: str, reason: str):
         if state == self._state and reason == self._state_reason:

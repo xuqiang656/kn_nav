@@ -76,15 +76,24 @@ PurePursuitNode::PurePursuitNode(const rclcpp::NodeOptions& options)
     path_sub_ = create_subscription<nav_msgs::msg::Path>(
         "/pct_path", 10, std::bind(&PurePursuitNode::pathCallback, this, std::placeholders::_1));
 
-    // open3d_loc: subscribe to /Odometry_open3d (frame_id=map, child_frame_id=base_link)
+    final_approach_sub_ = create_subscription<std_msgs::msg::Bool>(
+        final_approach_topic_, rclcpp::QoS(1).reliable().transient_local(),
+        std::bind(&PurePursuitNode::finalApproachCallback, this, std::placeholders::_1));
+
+    // open3d_loc: subscribe to odometry (frame_id=map, child_frame_id=base_link)
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-        "/Odometry_open3d", 10, std::bind(&PurePursuitNode::odomCallback, this, std::placeholders::_1));
+        odom_topic_, 10, std::bind(&PurePursuitNode::odomCallback, this, std::placeholders::_1));
 
     cmd_vel_pub_ = create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
 
     timer_ = create_wall_timer(
         std::chrono::milliseconds(100), std::bind(&PurePursuitNode::timerCallback, this));
     planner_ = PurePursuitComponent(config_);  // re-init with populated config_
+
+    RCLCPP_INFO(
+        this->get_logger(),
+        "Pure Pursuit ready: odom_topic=%s, odom_timeout=%.2f s",
+        odom_topic_.c_str(), config_.odom_timeout);
 }
 
 void PurePursuitNode::declareAndGetParameters() {
@@ -107,9 +116,34 @@ void PurePursuitNode::declareAndGetParameters() {
     config_.rotate_to_heading_gain =
         this->declare_parameter("rotate_to_heading_gain", 1.0);
     config_.obstacle_th = this->declare_parameter("obstacle_th", 0.5);
-    config_.odom_timeout = this->declare_parameter("odom_timeout", 0.3);
+    odom_topic_ = this->declare_parameter<std::string>("odom_topic", "/Odometry_open3d");
+    final_approach_topic_ = this->declare_parameter<std::string>(
+        "final_approach_topic", "/pct_art_local_navigation/final_approach");
+    config_.final_heading_entry_distance =
+        this->declare_parameter("final_heading_entry_distance", config_.goal_threshold);
+    config_.final_heading_command_deadband =
+        this->declare_parameter("final_heading_command_deadband", 0.02);
+    config_.min_final_angular_velocity =
+        this->declare_parameter("min_final_angular_velocity", 0.20);
+    config_.odom_timeout = this->declare_parameter("odom_timeout", 1.0);
     if (!std::isfinite(config_.goal_threshold) || config_.goal_threshold <= 0.0) {
         throw std::invalid_argument("goal_threshold must be finite and greater than zero");
+    }
+    if (!std::isfinite(config_.final_heading_entry_distance) ||
+        config_.final_heading_entry_distance <= 0.0) {
+        throw std::invalid_argument(
+            "final_heading_entry_distance must be finite and greater than zero");
+    }
+    if (!std::isfinite(config_.final_heading_command_deadband) ||
+        config_.final_heading_command_deadband < 0.0 ||
+        config_.final_heading_command_deadband > M_PI) {
+        throw std::invalid_argument(
+            "final_heading_command_deadband must be finite and in [0, pi]");
+    }
+    if (!std::isfinite(config_.min_final_angular_velocity) ||
+        config_.min_final_angular_velocity < 0.0) {
+        throw std::invalid_argument(
+            "min_final_angular_velocity must be finite and non-negative");
     }
     if (!std::isfinite(config_.Lfc) || config_.Lfc <= 0.0) {
         throw std::invalid_argument("Lfc must be finite and greater than zero");
@@ -143,12 +177,19 @@ void PurePursuitNode::declareAndGetParameters() {
     if (!std::isfinite(config_.odom_timeout) || config_.odom_timeout <= 0.0) {
         throw std::invalid_argument("odom_timeout must be finite and greater than zero");
     }
+    if (odom_topic_.empty()) {
+        throw std::invalid_argument("odom_topic must not be empty");
+    }
+    if (final_approach_topic_.empty()) {
+        throw std::invalid_argument("final_approach_topic must not be empty");
+    }
 }
 
 void PurePursuitNode::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
     if (msg->poses.empty()) {
         cx_.clear(); cy_.clear(); cyaw_.clear(); ck_.clear();
         path_received_ = false;
+        final_approach_ = false;
         planner_.odom_sub_flag = false;
         planner_.oldNearestPointIndex = -1;
         publishZeroVelocity();
@@ -227,6 +268,11 @@ void PurePursuitNode::pathCallback(const nav_msgs::msg::Path::SharedPtr msg) {
         cx_.size(), msg->header.frame_id.c_str());
 }
 
+void PurePursuitNode::finalApproachCallback(
+    const std_msgs::msg::Bool::SharedPtr msg) {
+    final_approach_ = msg->data;
+}
+
 void PurePursuitNode::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
     // Odometry_open3d: header.frame_id = 'map', child_frame_id = 'base_link'
     // Position is directly in map frame → matches /pct_path coordinates
@@ -274,7 +320,8 @@ void PurePursuitNode::timerCallback() {
             publishZeroVelocity();
             odom_timeout_stop_published_ = true;
             RCLCPP_ERROR(this->get_logger(),
-                "/Odometry_open3d timed out after %.3f s — publishing zero velocity.", odom_age);
+                "%s timed out after %.3f s — publishing zero velocity.",
+                odom_topic_.c_str(), odom_age);
         }
         return;
     }
@@ -286,7 +333,8 @@ void PurePursuitNode::timerCallback() {
         return;
     }
 
-    auto cmd_velocity = planner_.computeVelocity(cx_, cy_, cyaw_, ck_, current_pose_, current_vx_);
+    auto cmd_velocity = planner_.computeVelocity(
+        cx_, cy_, cyaw_, ck_, current_pose_, current_vx_, final_approach_);
 
     if (cmd_velocity.size() != 2 || !std::isfinite(cmd_velocity[0]) ||
         !std::isfinite(cmd_velocity[1])) {

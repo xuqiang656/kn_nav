@@ -11,8 +11,8 @@ tf:
   max_stale_time: 0.3  # [sec]
 
 map:
-  width: 10.0       # [m]
-  height: 10.0      # [m]
+  width: 15.0       # [m]
+  height: 15.0      # [m]
   resolution: 0.1   # [m/cell]
 
 point_filter:

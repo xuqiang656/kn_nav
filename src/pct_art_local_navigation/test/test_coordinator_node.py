@@ -59,9 +59,11 @@ def test_node_selects_goal_and_forwards_only_valid_art_path():
         requested_goals = []
         local_paths = PublisherRecorder()
         local_goals = PublisherRecorder()
+        final_approach = PublisherRecorder()
         node._request_art_goal = requested_goals.append
         node._local_path_pub = local_paths
         node._local_goal_pub = local_goals
+        node._final_approach_pub = final_approach
         node._lookup_robot_point = lambda now: Point2(0.0, 0.0)
 
         node._map_cb(make_map())
@@ -76,6 +78,7 @@ def test_node_selects_goal_and_forwards_only_valid_art_path():
         valid_art_path = make_path([0.1, 1.0, 2.0, 4.0])
         node._art_path_cb(valid_art_path)
         assert len(local_paths.messages) == 1
+        assert final_approach.messages[-1].data is True
         assert len(local_paths.messages[-1].poses) > 4
         assert math.isclose(local_paths.messages[-1].poses[0].pose.position.x, 0.1)
         assert math.isclose(local_paths.messages[-1].poses[-1].pose.position.x, 4.0)
@@ -85,6 +88,7 @@ def test_node_selects_goal_and_forwards_only_valid_art_path():
         node._art_path_cb(invalid_art_path)
         assert len(local_paths.messages) == 2
         assert not local_paths.messages[-1].poses
+        assert final_approach.messages[-1].data is False
         assert node._state == CoordinatorState.BLOCKED
     finally:
         node.destroy_node()
@@ -199,6 +203,37 @@ def test_completed_goal_is_cleared_and_does_not_resume_after_moving():
         node._update()
         assert node._state == CoordinatorState.GOAL_REACHED
         assert len(requested_goals) == 1
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+def test_final_path_must_end_close_to_global_goal():
+    os.environ['ROS_LOG_DIR'] = '/tmp/pct_art_local_navigation_test_logs'
+    rclpy.init()
+    node = PctArtCoordinator()
+    try:
+        requested_goals = []
+        local_paths = PublisherRecorder()
+        final_approach = PublisherRecorder()
+        node._request_art_goal = requested_goals.append
+        node._local_path_pub = local_paths
+        node._local_goal_pub = PublisherRecorder()
+        node._final_approach_pub = final_approach
+        node._lookup_robot_point = lambda now: Point2(0.0, 0.0)
+
+        node._map_cb(make_map())
+        node._global_path_cb(make_path([0.0, 1.0, 2.0, 3.0, 4.0]))
+        node._update()
+
+        assert node._local_goal_index == len(node._global_points) - 1
+        assert len(requested_goals) == 1
+
+        node._art_path_cb(make_path([0.0, 1.0, 2.0, 3.7]))
+
+        assert node._state == CoordinatorState.BLOCKED
+        assert 'ends 0.30 m from local goal' in node._state_reason
+        assert not local_paths.messages
     finally:
         node.destroy_node()
         rclpy.shutdown()

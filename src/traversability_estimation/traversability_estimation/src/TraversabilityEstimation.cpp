@@ -37,6 +37,7 @@ TraversabilityEstimation::TraversabilityEstimation(rclcpp::Node::SharedPtr& node
       updateDuration_(std::chrono::seconds(1)),
       gridMapToInitTraversabilityMapMaxUpdateRate_(0.0),
       lastGridMapToInitTraversabilityMapUpdateTime_(0, 0, nodeHandle->get_clock()->get_clock_type()),
+      gridMapInitializationLogged_(false),
       elevationMapRequestInFlight_(false){
   RCLCPP_DEBUG(nodeHandle_->get_logger(), "Traversability estimation node started.");
 
@@ -497,9 +498,18 @@ void TraversabilityEstimation::gridMapToInitTraversabilityMapCallback(const grid
   grid_map::GridMap gridMap;
   grid_map::GridMapRosConverter::fromMessage(message, gridMap);
   if (initializeTraversabilityMapFromGridMap(gridMap)) {
-    RCLCPP_INFO_THROTTLE(nodeHandle_->get_logger(), *nodeHandle_->get_clock(), 5000,
-                "[TraversabilityEstimation::gridMapToInitTraversabilityMapCallback]:Traversability Map initialized using received grid map on topic '%s'.",
-                gridMapToInitTraversabilityMapTopic_.c_str());
+    if (!gridMapInitializationLogged_) {
+      RCLCPP_INFO(
+        nodeHandle_->get_logger(),
+        "Traversability map initialized from '%s'. Further GridMap refresh logs are debug-only.",
+        gridMapToInitTraversabilityMapTopic_.c_str());
+      gridMapInitializationLogged_ = true;
+    } else {
+      RCLCPP_DEBUG(
+        nodeHandle_->get_logger(),
+        "Traversability map refreshed from '%s'.",
+        gridMapToInitTraversabilityMapTopic_.c_str());
+    }
   }
   // if (!initializeTraversabilityMapFromGridMap(gridMap)) {
   //   RCLCPP_ERROR(nodeHandle_->get_logger(), "[TraversabilityEstimation::gridMapToInitTraversabilityMapCallback]:It was not possible to use received grid map message to initialize traversability map.");

@@ -41,7 +41,7 @@ interface argument is required:
 
 ```bash
 ros2 launch pure_pursuit_planner pct_pure_pursuit.launch.py \
-  network_interface:=enp2s0
+  network_interface:=eth0
 ```
 
 The bridge never changes the robot posture or gait. After manually preparing

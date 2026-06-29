@@ -17,7 +17,19 @@ Build and launch:
 ```bash
 colcon build --symlink-install --packages-up-to pct_art_local_navigation
 source install/setup.bash
-ros2 launch pct_art_local_navigation pct_art_local_navigation.launch.py \
+```
+
+For local test config, launch:
+
+```bash
+ros2 launch pct_art_local_navigation local_pct_art_local_navigation.launch.py \
+  network_interface:=enp2s0
+```
+
+For Unitree robot config, launch:
+
+```bash
+ros2 launch pct_art_local_navigation unitree_pct_art_local_navigation.launch.py \
   network_interface:=enp2s0
 ```
 
@@ -33,17 +45,16 @@ If the PCT planner is already running, add `start_pct_planner:=false`.
 The launch file adds the standard Unitree SDK install directory
 `/opt/unitree_robotics/lib` to `LD_LIBRARY_PATH` for the Go2 bridge.
 
-Goal completion and heading control parameters are kept in this package's YAML
-files:
+Goal completion is owned by `pct_art_coordinator`. Pure Pursuit only tracks the
+current `/local_path` and performs final heading control while
+`/pct_art_local_navigation/final_approach` is true.
 
 - `config/coordinator.yaml`: `goal_reached_distance` (metres) and
-  `goal_yaw_tolerance` (radians), plus ART path post-processing parameters
-  `enable_path_smoothing`, `path_min_point_spacing`, `path_resample_spacing`,
-  `path_collinear_angle_threshold`, `path_smoothing_iterations`,
-  `path_smoothing_data_weight`, `path_smoothing_smooth_weight`, and
-  `path_max_deviation`.
+  `goal_yaw_tolerance` (radians), plus final segment validation with
+  `final_maximum_path_goal_distance`.
 - `config/pure_pursuit_local.yaml`: `rotate_to_path_threshold`,
-  `rotate_to_path_tolerance`, `goal_yaw_tolerance`, and
+  `rotate_to_path_tolerance`, `final_heading_entry_distance`,
+  `final_heading_command_deadband`, `min_final_angular_velocity`, and
   `rotate_to_heading_gain`.
 
 The coordinator latches `GOAL_REACHED` and forgets the completed PCT task after

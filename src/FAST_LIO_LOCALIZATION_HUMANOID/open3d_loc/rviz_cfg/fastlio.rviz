@@ -5,8 +5,12 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /TF1/Frames1
-        - //pct_path1
+        - //art_planner/path1
         - /GridMap1
+        - //local_path1
+        - //local_path1/Status1
+        - //local_path1/Topic1
+        - //local_path1/Offset1
       Splitter Ratio: 0.5743380784988403
     Tree Height: 625
   - Class: rviz_common/Selection
@@ -166,13 +170,13 @@ Visualization Manager:
     - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
-      Color: 25; 255; 0
+      Color: 99; 69; 44
       Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
-      Line Style: Lines
-      Line Width: 0.029999999329447746
+      Line Style: Billboards
+      Line Width: 0.05000000074505806
       Name: /art_planner/path
       Offset:
         X: 0
@@ -322,7 +326,7 @@ Visualization Manager:
       Autocompute Intensity Bounds: true
       Class: grid_map_rviz_plugin/GridMap
       Color: 200; 200; 200
-      Color Layer: elevation
+      Color Layer: elevation_masked
       Color Transformer: GridMapLayer
       Enabled: true
       Height Layer: elevation
@@ -343,6 +347,34 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /art_planner/map
       Use Rainbow: true
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 97; 53; 131
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Billboards
+      Line Width: 0.029999999329447746
+      Name: /local_path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /local_path
       Value: true
   Enabled: true
   Global Options:
@@ -390,25 +422,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 15.09108829498291
+      Distance: 11.271331787109375
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 2.63106369972229
-        Y: -0.42686745524406433
-        Z: -7.189093112945557
+        X: 2.928711175918579
+        Y: 0.8574427366256714
+        Z: -7.205488204956055
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5547963380813599
+      Pitch: 1.5697963237762451
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz_default_plugins)
-      Yaw: 3.784867763519287
+      Yaw: 3.8448617458343506
     Saved: ~
 Window Geometry:
   Displays:

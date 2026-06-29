@@ -11,18 +11,19 @@ pct_art_coordinator:
     art_action_name: /art_planner/plan_to_goal
     update_rate: 2.0
     lookahead_distance: 3.5
-    minimum_goal_distance: 0.8
+    minimum_goal_distance: 0.15
     maximum_goal_distance: 4.0
     map_edge_margin: 0.8
     advance_distance: 1.5
     goal_update_distance: 0.8
     goal_update_min_period: 0.5
-    goal_reached_distance: 0.35
-    goal_yaw_tolerance: 0.175
+    goal_reached_distance: 0.15
+    goal_yaw_tolerance: 0.10
     progress_backtrack_points: 10
     progress_forward_search_points: 200
     maximum_path_start_distance: 1.0
     maximum_path_goal_distance: 0.8
+    final_maximum_path_goal_distance: 0.25
     map_timeout: 6.0
     localization_timeout: 0.5
     art_path_timeout: 2.0

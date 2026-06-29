@@ -36,7 +36,8 @@ std::vector<double> PurePursuitComponent::computeVelocity(
     const std::vector<double>& cyaw,
     const std::vector<double>& ck,
     const Pose2D& pose, 
-    double velocity
+    double velocity,
+    bool final_approach
 ) 
     {
     if (cx.empty() || cx.size() != cy.size() || cx.size() != cyaw.size() ||
@@ -47,15 +48,15 @@ std::vector<double> PurePursuitComponent::computeVelocity(
     setPath(cx, cy, cyaw, ck);
     setPose(pose, velocity);
 
-    const double goal_distance = calcDistance(
+    const double path_end_distance = calcDistance(
         current_pose_.x, current_pose_.y, cx_.back(), cy_.back());
-    if (goal_distance <= cfg_.goal_threshold) {
+    if (final_approach && path_end_distance <= cfg_.final_heading_entry_distance) {
         rotating_to_path_ = false;
         const double goal_yaw_error = normalizeAngle(cyaw_.back() - current_pose_.yaw);
-        if (std::abs(goal_yaw_error) <= cfg_.goal_yaw_tolerance) {
+        if (std::abs(goal_yaw_error) <= cfg_.final_heading_command_deadband) {
             return {0.0, 0.0};
         }
-        return {0.0, calculateRotationAngularVelocity(goal_yaw_error)};
+        return {0.0, calculateFinalRotationAngularVelocity(goal_yaw_error)};
     }
 
     //std::cout << "odom_sub_flag: " << odom_sub_flag << std::endl;
@@ -105,8 +106,6 @@ std::vector<double> PurePursuitComponent::computeVelocity(
     double w = calculateAngularVelocity(v, alpha, Lf);
     w = std::clamp(w, -cfg_.maxAngularVelocity, cfg_.maxAngularVelocity);
 
-    std::tie(v, w) = isGoalReached(v, w);
-
     std::vector<double> cmd_velocity{v, w};
 
 
@@ -147,22 +146,25 @@ double PurePursuitComponent::calculateRotationAngularVelocity(double yaw_error) 
         cfg_.maxAngularVelocity);
 }
 
+double PurePursuitComponent::calculateFinalRotationAngularVelocity(double yaw_error) const {
+    double command = calculateRotationAngularVelocity(yaw_error);
+    if (std::abs(command) <= 0.0) {
+        return command;
+    }
+    const double minimum = std::min(cfg_.min_final_angular_velocity,
+                                    cfg_.maxAngularVelocity);
+    if (std::abs(command) < minimum) {
+        command = std::copysign(minimum, command);
+    }
+    return std::clamp(command, -cfg_.maxAngularVelocity, cfg_.maxAngularVelocity);
+}
+
 
 double PurePursuitComponent::curvatureToVelocity(double curvature) const {
     return (cfg_.maxVelocity- cfg_.minVelocity) * pow(sin(acos(std::cbrt(curvature))), 3) + cfg_.minVelocity;
 }
 
 std::pair<double, double> PurePursuitComponent::isGoalReached(double v, double w) const {
-    if (cx_.empty() || cx_.size() != cy_.size()) {
-        return {0.0, 0.0};
-    }
-    size_t last_index = cx_.size() - 1;
-    double goal_distance = calcDistance(current_pose_.x, current_pose_.y, cx_[last_index], cy_[last_index]);
-
-    if (goal_distance <= cfg_.goal_threshold){
-        v = 0.0;
-        w = 0.0;
-    }
     return {v, w};
 }
 

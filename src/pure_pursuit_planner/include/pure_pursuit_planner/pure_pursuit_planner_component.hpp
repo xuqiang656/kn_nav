@@ -18,6 +18,9 @@ struct PurePursuitConfig {
     double Kp = 1.0;
     double dt = 0.1;
     double goal_threshold = 0.4;
+    double final_heading_entry_distance = 0.20;
+    double final_heading_command_deadband = 0.02;
+    double min_final_angular_velocity = 0.20;
     double max_acceleration = 0.08;
     double minCurvature = 0.0;
     double maxCurvature = 3.0;
@@ -49,7 +52,8 @@ public:
         const std::vector<double>& cyaw,
         const std::vector<double>& ck,
         const Pose2D& pose, 
-        double velocity
+        double velocity,
+        bool final_approach = false
     );
 
     double calcLf(double k, double current_velocity, double Lfc) const;
@@ -75,6 +79,7 @@ public:
 private:
     double calcDistance(double x1, double y1, double x2, double y2) const;
     double normalizeAngle(double angle) const;
+    double calculateFinalRotationAngularVelocity(double yaw_error) const;
     double calculateRotationAngularVelocity(double yaw_error) const;
     std::pair<double, std::pair<double, double>> calcClosestPointOnPath();
     std::pair<double, double> calcAcceleration(double current_vel);

@@ -249,34 +249,13 @@ TEST(calculateAngularVelocity, CsvBasedTest) {
     runCsvTests(tests, tol);  // sinが含まれるので誤差許容必要
 }
 
-// pp-13 ゴールに到達したとき、v, w をゼロにする
-TEST(isGoalReached, CsvBasedTest) {
-    std::vector<FuncTest> tests = {
-        FuncTest{
-            "isGoalReached",
-            {
-                "pose_x", "pose_y",
-                "cx0", "cy0", "cx1", "cy1",
-                "v", "w"
-            },
-            {"expected_v", "expected_w"},
-            [](const auto &r){
-                // 経路設定
-                std::vector<double> cx = {r.at("cx0"), r.at("cx1")};
-                std::vector<double> cy = {r.at("cy0"), r.at("cy1")};
+TEST(isGoalReached, NoLongerClearsCommands) {
+    PurePursuitComponent pp(PurePursuitConfig{});
+    pp.setPath({0.0, 1.0}, {0.0, 0.0}, {}, {});
+    pp.setPose(Pose2D{1.0, 0.0, 0.0}, 0.0);
 
-                PurePursuitConfig config;
-                PurePursuitComponent pp(config);
-                pp.setPath(cx, cy, {}, {});
-                pp.setPose(Pose2D{r.at("pose_x"), r.at("pose_y"), 0.0}, 0.0);
-
-                auto [v, w] = pp.isGoalReached(r.at("v"), r.at("w"));
-                return std::vector<double>{v, w};
-            }
-        }
-    };
-
-    runCsvTests(tests, tol);
+    auto [v, w] = pp.isGoalReached(0.2, 0.1);
+    EXPECT_DOUBLE_EQ(v, 0.2);
+    EXPECT_DOUBLE_EQ(w, 0.1);
 }
-
 

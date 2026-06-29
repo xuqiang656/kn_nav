@@ -205,6 +205,7 @@ class TraversabilityEstimation {
   bool acceptGridMapToInitTraversabilityMap_;
   double gridMapToInitTraversabilityMapMaxUpdateRate_;
   rclcpp::Time lastGridMapToInitTraversabilityMapUpdateTime_;
+  bool gridMapInitializationLogged_;
   std::string updatetraversabilitysubscriber_;
 
   //! Elevation map service client.

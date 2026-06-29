@@ -1,0 +1,16 @@
+traversability_estimation:
+  ros__parameters:
+    submap_service: "/get_raw_submap" # unused when min_update_rate is 0 and FastDEM GridMap topic is used
+    map_frame_id: "map"  # Must be the same as the input elevation submap.
+    robot_frame_id: "base_link"
+    min_update_rate: 0.0 # FastDEM pushes GridMap updates by topic; do not call a submap service.
+    map_center_x: 0.0
+    map_center_y: 0.0
+    map_length_x: 10.0
+    map_length_y: 10.0
+    footprint_yaw: 0.7854
+    max_gap_width: 0.2
+    grid_map_to_initialize_traversability_map:
+      enable: true
+      grid_map_topic_name: /fastdem/mapping/gridmap
+      max_update_rate: 5.0
