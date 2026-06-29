@@ -3,12 +3,14 @@
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
+    IncludeLaunchDescription,
     LogInfo,
     RegisterEventHandler,
     SetEnvironmentVariable,
 )
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessStart
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (
     EnvironmentVariable,
     LaunchConfiguration,
@@ -38,11 +40,11 @@ def generate_launch_description():
     pct_params_file = LaunchConfiguration('pct_params_file')
     network_interface = LaunchConfiguration('network_interface')
     package_share = FindPackageShare('pct_art_local_navigation')
+    open3d_loc_share = FindPackageShare('open3d_loc')
 
     def config_file(filename):
         return PathJoinSubstitution([package_share, 'config', CONFIG_NAME, filename])
 
-    open3d_loc_params = config_file('open3d_loc.yaml')
     fastdem_params = config_file('fastdem_local_mapping.yaml')
     traversability_robot_params = config_file('traversability_robot.yaml')
     traversability_footprint_params = config_file(
@@ -63,21 +65,15 @@ def generate_launch_description():
         ],
     )
 
-    open3d_global_localization = Node(
-        package='open3d_loc',
-        executable='global_localization_node',
-        name='global_localization_node',
-        output='both',
-        parameters=[open3d_loc_params, {'use_sim_time': use_sim_time}],
-        condition=IfCondition(start_open3d_loc),
-    )
-
-    open3d_localization_service = Node(
-        package='open3d_loc',
-        executable='localization_service_node',
-        name='localization_service_node',
-        output='both',
-        parameters=[open3d_loc_params, {'use_sim_time': use_sim_time}],
+    unitree_localization = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                open3d_loc_share,
+                'launch',
+                'unitree_localization_3d_g1.launch.py',
+            ])
+        ]),
+        launch_arguments={'use_sim_time': use_sim_time}.items(),
         condition=IfCondition(start_open3d_loc),
     )
 
@@ -186,11 +182,10 @@ def generate_launch_description():
         ),
         unitree_runtime_environment,
         startup_summary,
-        log_process_start(
-            open3d_global_localization,
-            'open3d global localization (/Odometry_open3d)',
+        LogInfo(
+            msg='[pct_art bringup] including unitree localization stack',
+            condition=IfCondition(start_open3d_loc),
         ),
-        log_process_start(open3d_localization_service, 'open3d localization service'),
         log_process_start(pct_planner, 'pct_global_planner (/pct_path)'),
         log_process_start(fastdem, 'fastdem (/fastdem/mapping/gridmap)'),
         log_process_start(
@@ -210,8 +205,7 @@ def generate_launch_description():
             go2_bridge,
             'go2_cmd_vel_bridge (/go2_cmd_vel_bridge/enable)',
         ),
-        open3d_global_localization,
-        open3d_localization_service,
+        unitree_localization,
         pct_planner,
         fastdem,
         traversability,

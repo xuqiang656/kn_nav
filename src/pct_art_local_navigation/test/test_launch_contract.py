@@ -31,6 +31,9 @@ def test_local_and_unitree_launches_select_fixed_config_dirs():
     assert "CONFIG_NAME = 'unitree'" in unitree_source
     assert "LaunchConfiguration('profile')" not in local_source
     assert "LaunchConfiguration('profile')" not in unitree_source
+    assert 'unitree_localization_3d_g1.launch.py' in unitree_source
+    assert "executable='global_localization_node'" not in unitree_source
+    assert "executable='localization_service_node'" not in unitree_source
 
 
 def test_launch_files_live_only_in_launch_directory():

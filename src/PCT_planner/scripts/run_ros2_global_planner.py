@@ -27,19 +27,18 @@ import ctypes
 import numpy as np
 import open3d as o3d
 
-# Set this one path manually when moving the project to another machine.
-LIB_PATH = '/home/kangneng/xq/code/work_space/kn_nav_ws/src/PCT_planner/planner/lib'
-ROOT = os.path.dirname(os.path.dirname(LIB_PATH))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+LIB_PATH = os.path.join(ROOT, 'planner', 'lib')
 
 # ── GTSAM + smoothing libs preload (must happen before pybind11 imports) ──
 for _lib in [
-    LIB_PATH + '/libmetis-gtsam.so',
-    LIB_PATH + '/libgtsam.so.4',
-    LIB_PATH + '/libcommon_smoothing.so',
+    os.path.join(LIB_PATH, 'libmetis-gtsam.so'),
+    os.path.join(LIB_PATH, 'libgtsam.so.4'),
+    os.path.join(LIB_PATH, 'libcommon_smoothing.so'),
 ]:
     ctypes.CDLL(_lib, mode=ctypes.RTLD_GLOBAL)
 
-sys.path.insert(0, ROOT + '/planner')
+sys.path.insert(0, os.path.join(ROOT, 'planner'))
 
 import rclpy
 from rclpy.node import Node
@@ -63,9 +62,9 @@ def _load(path, module_name):
 
 
 # Planner modules (same loading pattern as the interactive runner)
-sys.path.insert(0, ROOT + '/planner/scripts')
-sys.path.insert(0, ROOT + '/planner')
-_plan_cfg = _load(ROOT + '/planner/config/__init__.py', 'plan_config')
+sys.path.insert(0, os.path.join(ROOT, 'planner', 'scripts'))
+sys.path.insert(0, os.path.join(ROOT, 'planner'))
+_plan_cfg = _load(os.path.join(ROOT, 'planner', 'config', '__init__.py'), 'plan_config')
 PlanCfg = _plan_cfg.Config
 from planner_wrapper import TomogramPlanner
 
